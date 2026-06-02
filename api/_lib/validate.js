@@ -13,7 +13,7 @@ const TIPOS_PERMITIDOS = new Set([]);
 
 /** Verticais permitidas — valores confirmados no Jira. */
 const VERTICAIS_VALIDAS = new Set([
-  'Arrecadação', 'Atendimento', 'Compras/Contratos', 'Contábil',
+  'Arrecadação', 'Atendimento', 'Contratos', 'Contábil',
   'Educação', 'Pessoal', 'Saúde',
 ]);
 

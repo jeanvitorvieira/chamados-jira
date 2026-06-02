@@ -163,7 +163,7 @@
           <option value="">Todas as verticais</option>
           <option value="Arrecadação">Arrecadação</option>
           <option value="Atendimento">Atendimento</option>
-          <option value="Compras/Contratos">Compras/Contratos</option>
+          <option value="Contratos">Compras/Contratos</option>
           <option value="Contábil">Contábil</option>
           <option value="Educação">Educação</option>
           <option value="Pessoal">Pessoal</option>
@@ -537,6 +537,8 @@ function renderTable(issues) {
     return '<tr>' +
       '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
       '<td style="max-width:340px">' + escHtml(i.summary) + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.portfolio || '—') + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
@@ -544,7 +546,7 @@ function renderTable(issues) {
       '</tr>';
   }).join('');
   return '<div class="table-wrap"><table>' +
-    '<thead><tr><th>Chamado</th><th>Resumo</th><th>Status</th><th>Prior.</th><th>Tipo</th><th>Atualizado</th></tr></thead>' +
+    '<thead><tr><th>Chamado</th><th>Resumo</th><th>Portfólio</th><th>Vertical</th><th>Status</th><th>Prior.</th><th>Tipo</th><th>Atualizado</th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
