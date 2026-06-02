@@ -82,10 +82,9 @@ module.exports = async function handler(req, res) {
   const issues = (data.issues ?? []).map(mapIssue);
 
   return res.status(200).json({
-    ok:     true,
-    total:  data.total,
+    ok:    true,
+    total: data.total,
     issues,
-    jql,    // exposto para facilitar debug
   });
 };
 

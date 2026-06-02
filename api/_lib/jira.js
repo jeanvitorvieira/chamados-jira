@@ -108,6 +108,17 @@ async function searchUsers(query, maxResults = 10) {
   return request(`/rest/api/2/user/search?${qs}`);
 }
 
+/**
+ * GET simples e autenticado — reutilizado por handlers que não precisam
+ * do helper `request` completo (ex: tipos.js).
+ *
+ * @param {string} path - Path relativo (ex: "/rest/api/2/issuetype")
+ * @returns {Promise<any>}
+ */
+async function get(path) {
+  return request(path);
+}
+
 // ── CLASSES DE ERRO ────────────────────────────────────────────────────────────
 
 /** Erro originado da API do Jira (resposta HTTP não-ok). */
@@ -128,4 +139,4 @@ class ConfigError extends Error {
   }
 }
 
-module.exports = { searchIssues, searchUsers, JiraError, ConfigError, _getConfig: getConfig };
+module.exports = { searchIssues, searchUsers, get, JiraError, ConfigError };

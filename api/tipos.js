@@ -8,26 +8,9 @@
  *   { ok: true, tipos: string[] }
  */
 
-const { ConfigError, JiraError } = require('./_lib/jira');
+const { get, JiraError, ConfigError } = require('./_lib/jira');
 
-// Reutiliza o cliente centralizado em vez de duplicar auth/timeout
-async function fetchIssuetypes() {
-  const { url, authHeader } = require('./_lib/jira')._getConfig();
-  const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), 8000);
-  try {
-    const r = await fetch(`${url}/rest/api/2/issuetype`, {
-      signal: controller.signal,
-      headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-    });
-    if (!r.ok) throw new JiraError(`HTTP ${r.status}`, r.status);
-    return r.json();
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-// Tipos que não fazem sentido exibir no contexto de atendimento
+// Tipos sem sentido no contexto de atendimento ao cliente
 const TIPOS_EXCLUIDOS = new Set([
   'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
   'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
@@ -45,12 +28,14 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const data  = await fetchIssuetypes();
+    const data  = await get('/rest/api/2/issuetype');
     const tipos = data
       .filter(t => !t.subtask && !TIPOS_EXCLUIDOS.has(t.name))
       .map(t => t.name)
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
+    // Cache de 1h — tipos mudam raramente
+    res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
     return res.status(200).json({ ok: true, tipos });
   } catch (err) {
     if (err instanceof ConfigError) {

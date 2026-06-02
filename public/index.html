@@ -87,6 +87,13 @@
   tbody tr:hover td { background: #F8FAFF; }
   .key-link { color: var(--blue-mid); text-decoration: none; font-weight: 700; font-size: 12px; }
   .key-link:hover { text-decoration: underline; }
+  /* Ordenação de colunas */
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { background: #eaecf2; }
+  thead th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+  thead th.sort-desc::after { content: ' ▼'; font-size: 9px; }
+  /* Aviso de resultado incompleto */
+  .incomplete-banner { background: var(--blue-light); border: 1.5px solid var(--blue-mid); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 12px; font-size: 12px; color: var(--blue-primary); font-weight: 600; }
   .pri-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
   .pri-1 { background: var(--red-light); color: var(--red); }
   .pri-2 { background: var(--yellow-light); color: #7B5800; }
@@ -492,6 +499,10 @@ function buscar() {
 document.querySelectorAll('select').forEach(function(el) {
   el.addEventListener('keydown', function(e) { if (e.key === 'Enter') buscar(); });
 });
+// Enter no campo responsável (quando lista fechada)
+inpUser.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
+});
 
 // ── RENDERIZAÇÃO ─────────────────────────────────────────────────────────────
 var STATUS_BG = {
@@ -523,8 +534,15 @@ function statusPill(s) {
 
 function priBadge(p) {
   var map = {'Highest':'1','High':'2','Medium':'3','Low':'4','Lowest':'4','1':'1','2':'2','3':'3','4':'4','5':'4'};
-  var n = map[p] || '3';
+  var n = map[String(p)];
+  if (!n) return '<span style="color:var(--text-secondary);font-size:11px">—</span>';
   return '<span class="pri-badge pri-' + n + '">P' + n + '</span>';
+}
+
+// Abrevia o nome do portfólio para exibição na tabela
+function abrevPortfolio(p) {
+  if (!p) return '—';
+  return escHtml(p.replace('Portfólio ', ''));
 }
 
 function fmtDate(iso) {
@@ -534,16 +552,40 @@ function fmtDate(iso) {
          d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
-function renderTable(issues) {
+// Estado de ordenação atual
+var sortState = { col: null, dir: 'asc' };
+
+var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'status', 'priority', 'type', 'updated'];
+
+function sortIssues(issues, col, dir) {
+  return issues.slice().sort(function(a, b) {
+    var va = a[col] || '';
+    var vb = b[col] || '';
+    // Prioridade: comparação numérica
+    if (col === 'priority') { va = parseInt(va) || 99; vb = parseInt(vb) || 99; }
+    var cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function renderTable(issues, tableId) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
-  var rows = issues.map(function(i) {
-    // Validação da URL: só permite https:// para prevenir javascript: injection
-    var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://'))
-      ? escHtml(i.url) : '#';
+
+  var sorted = sortState.col ? sortIssues(issues, sortState.col, sortState.dir) : issues;
+
+  var headers = ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Atualizado'];
+  var ths = headers.map(function(h, idx) {
+    var col = SORT_KEYS[idx];
+    var cls = 'sortable' + (sortState.col === col ? (' sort-' + sortState.dir) : '');
+    return '<th class="' + cls + '" onclick="onSort(\'' + tableId + '\',\'' + col + '\')">' + h + '</th>';
+  }).join('');
+
+  var rows = sorted.map(function(i) {
+    var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
     return '<tr>' +
       '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
-      '<td style="max-width:340px">' + escHtml(i.summary) + '</td>' +
-      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.portfolio || '—') + '</td>' +
+      '<td style="max-width:300px">' + escHtml(i.summary) + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
@@ -551,13 +593,32 @@ function renderTable(issues) {
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + fmtDate(i.updated) + '</td>' +
       '</tr>';
   }).join('');
-  return '<div class="table-wrap"><table>' +
-    '<thead><tr><th>Chamado</th><th>Resumo</th><th>Portfólio</th><th>Vertical</th><th>Status</th><th>Prior.</th><th>Tipo</th><th>Atualizado</th></tr></thead>' +
+
+  return '<div class="table-wrap"><table id="' + tableId + '">' +
+    '<thead><tr>' + ths + '</tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
+// Armazena issues por seção para re-renderizar ao ordenar
+var _lastData = null;
+var _lastUser = null;
+
+function onSort(tableId, col) {
+  if (sortState.col === col) {
+    sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortState.col = col;
+    sortState.dir = 'asc';
+  }
+  if (_lastData) renderResults(_lastData, _lastUser);
+}
+
 function renderResults(data, userKey) {
-  var issues = data.issues || [];
+  // Salva para re-renderizar ao ordenar
+  _lastData = data;
+  _lastUser = userKey;
+
+  var issues     = data.issues || [];
   var unassigned = issues.filter(function(i) { return !i.assignee; });
   var assigned   = issues.filter(function(i) { return !!i.assignee; });
   var userName   = (selectedUser && selectedUser.displayName) || userKey || null;
@@ -567,14 +628,19 @@ function renderResults(data, userKey) {
   document.getElementById('chip-mine').textContent       = assigned.length;
   document.getElementById('chips').style.display         = 'flex';
 
-  document.getElementById('results').innerHTML =
+  // Aviso de resultado incompleto (total > retornados)
+  var incompleto = data.total > issues.length
+    ? '<div class="incomplete-banner">⚠️ Exibindo ' + issues.length + ' de ' + data.total + ' chamados. Refine os filtros ou reduza o período para ver todos.</div>'
+    : '';
+
+  document.getElementById('results').innerHTML = incompleto +
     '<div class="section">' +
       '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
-      renderTable(unassigned) +
+      renderTable(unassigned, 'tbl-unassigned') +
     '</div>' +
     '<div class="section">' +
-      '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + userName : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
-      renderTable(assigned) +
+      '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + escHtml(userName) : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
+      renderTable(assigned, 'tbl-assigned') +
     '</div>';
 }
 
