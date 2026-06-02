@@ -64,18 +64,32 @@ async function request(path, options = {}) {
 // ── MÉTODOS DE DOMÍNIO ────────────────────────────────────────────────────────
 
 /**
- * Busca issues via JQL usando a API de search do Jira.
+ * Busca todas as issues via JQL, paginando automaticamente até esgotar os resultados.
+ * O Jira limita cada página a 100 registros; esta função encadeia as páginas
+ * e devolve um objeto compatível com o formato de uma única resposta.
  *
- * @param {string} jql
- * @param {string[]} fields  - Lista de campos a retornar
- * @param {number}   [maxResults=100]
+ * @param {string}   jql
+ * @param {string[]} fields - Lista de campos a retornar
  * @returns {Promise<{ issues: any[], total: number }>}
  */
-async function searchIssues(jql, fields, maxResults = 100) {
-  return request('/rest/api/2/search', {
-    method: 'POST',
-    body: JSON.stringify({ jql, fields, maxResults, startAt: 0 }),
-  });
+async function searchIssues(jql, fields) {
+  const PAGE_SIZE = 100;
+  let startAt = 0;
+  let total = null;
+  const allIssues = [];
+
+  do {
+    const page = await request('/rest/api/2/search', {
+      method: 'POST',
+      body: JSON.stringify({ jql, fields, maxResults: PAGE_SIZE, startAt }),
+    });
+
+    if (total === null) total = page.total;
+    allIssues.push(...(page.issues ?? []));
+    startAt += PAGE_SIZE;
+  } while (startAt < total);
+
+  return { issues: allIssues, total };
 }
 
 /**
