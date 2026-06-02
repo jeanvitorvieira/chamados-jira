@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
  * Os valores já chegam escapados de validate.js.
  */
 function buildJql({ vertical, portfolio, user }) {
-  const clauses = ['statusCategory != Done'];
+  const clauses = ['statusCategory != Done', 'issuetype != "Melhoria"'];
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
