@@ -37,7 +37,7 @@ async function poll(config) {
 
     const r    = await fetch(`/api/chamados?${params}`);
     const data = await r.json();
-    if (data.error || !data.issues) return;
+    if (!data.ok || !data.issues) return;
 
     const currentKeys = new Set(data.issues.map(i => i.key));
     const knownKeys   = new Set(config.knownKeys || []);

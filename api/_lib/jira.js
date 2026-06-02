@@ -5,17 +5,17 @@
  * de erros, evitando repetição nos handlers de cada rota.
  */
 
+// Config cacheada no módulo — evita recriar o authHeader a cada request.
+let _config = null;
+
 /**
  * Lê e valida as variáveis de ambiente obrigatórias.
- * Lança um erro descritivo se alguma estiver ausente,
- * impedindo que requests cheguem ao Jira sem credenciais.
+ * O resultado é cacheado na primeira chamada para evitar trabalho redundante.
  *
  * @returns {{ url: string, authHeader: string }}
  */
 function getConfig() {
-  const url      = process.env.JIRA_URL?.replace(/\/$/, ''); // remove trailing slash
-  const user     = process.env.JIRA_USER;
-  const password = process.env.JIRA_PASSWORD;
+  if (_config) return _config;
 
   const missing = ['JIRA_URL', 'JIRA_USER', 'JIRA_PASSWORD'].filter(
     k => !process.env[k]
@@ -24,8 +24,13 @@ function getConfig() {
     throw new ConfigError(`Variáveis de ambiente ausentes: ${missing.join(', ')}`);
   }
 
-  const authHeader = 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64');
-  return { url, authHeader };
+  const url        = process.env.JIRA_URL.replace(/\/$/, '');
+  const authHeader = 'Basic ' + Buffer.from(
+    `${process.env.JIRA_USER}:${process.env.JIRA_PASSWORD}`
+  ).toString('base64');
+
+  _config = { url, authHeader };
+  return _config;
 }
 
 /**
@@ -42,8 +47,13 @@ function getConfig() {
 async function request(path, options = {}) {
   const { url, authHeader } = getConfig();
 
+  // Timeout explícito de 8s — deixa margem para o Vercel processar a resposta
+  // dentro do limite de 10s do plano gratuito.
+  const signal = AbortSignal.timeout(8000);
+
   const response = await fetch(`${url}${path}`, {
     ...options,
+    signal,
     headers: {
       'Authorization': authHeader,
       'Content-Type':  'application/json',

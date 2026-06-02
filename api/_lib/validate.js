@@ -8,17 +8,19 @@
  * num campo JQL poderia expor chamados de outros projetos.
  */
 
-/** Verticais permitidas — lista fechada para validação estrita. */
+/** Verticais permitidas — valores confirmados no Jira. */
 const VERTICAIS_VALIDAS = new Set([
-  'Arrecadação', 'Beth', 'Contábil', 'Contratos', 'Educação',
-  'Governo Digital', 'ISS', 'Pessoal', 'Saúde', 'Studio', 'Suite',
+  'Arrecadação', 'Atendimento', 'Contábil', 'Contratos', 'Educação',
+  'ISS', 'Parceiro de Negócios', 'Parceiros', 'Pessoal', 'Plataforma',
+  'Revenda', 'Saúde', 'Tecnologia',
 ]);
 
-/** Portfólios permitidos — lista fechada. */
+/** Portfólios permitidos — valores confirmados no Jira. */
 const PORTFOLIOS_VALIDOS = new Set([
   'Portfólio Pequenas Contas',
   'Portfólio Médias Contas',
-  'Portfólio Grandes Contas',
+  'Portfólio SC/MG',
+  'Portfólio SC/SP',
 ]);
 
 /**

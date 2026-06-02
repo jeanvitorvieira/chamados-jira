@@ -99,6 +99,10 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .placeholder-msg { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 14px; }
   .placeholder-msg .big { font-size: 40px; margin-bottom: 10px; }
+  .inp-warn { border-color: var(--orange) !important; }
+  .inp-warn::placeholder { color: var(--orange-dark); }
+  .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
+  .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
 </style>
 </head>
 <body>
@@ -131,7 +135,8 @@
           <option value="">Todos os portfólios</option>
           <option value="Portfólio Pequenas Contas">Pequenas Contas</option>
           <option value="Portfólio Médias Contas">Médias Contas</option>
-          <option value="Portfólio Grandes Contas">Grandes Contas</option>
+          <option value="Portfólio SC/MG">SC/MG</option>
+          <option value="Portfólio SC/SP">SC/SP</option>
         </select>
       </div>
       <div class="form-group">
@@ -139,16 +144,18 @@
         <select id="sel-vertical">
           <option value="">Todas as verticais</option>
           <option value="Arrecadação">Arrecadação</option>
-          <option value="Beth">Beth</option>
+          <option value="Atendimento">Atendimento</option>
           <option value="Contábil">Contábil</option>
           <option value="Contratos">Contratos</option>
           <option value="Educação">Educação</option>
-          <option value="Governo Digital">Governo Digital</option>
           <option value="ISS">ISS</option>
+          <option value="Parceiro de Negócios">Parceiro de Negócios</option>
+          <option value="Parceiros">Parceiros</option>
           <option value="Pessoal">Pessoal</option>
+          <option value="Plataforma">Plataforma</option>
+          <option value="Revenda">Revenda</option>
           <option value="Saúde">Saúde</option>
-          <option value="Studio">Studio</option>
-          <option value="Suite">Suite</option>
+          <option value="Tecnologia">Tecnologia</option>
         </select>
       </div>
       <div class="form-group">
@@ -157,6 +164,7 @@
           <input type="text" id="inp-user" placeholder="Digite o nome ou e-mail..." autocomplete="off">
           <input type="hidden" id="inp-user-val">
           <div class="autocomplete-list" id="autocomplete-list"></div>
+          <span class="inp-hint">Selecione um usuário da lista</span>
         </div>
       </div>
       <button class="btn-buscar" id="btn-buscar" onclick="buscar()">🔍 Buscar</button>
@@ -188,18 +196,52 @@ var inpUser = document.getElementById('inp-user');
 var inpUserVal = document.getElementById('inp-user-val');
 var acList = document.getElementById('autocomplete-list');
 
+// ── SEGURANÇA: escape de HTML para prevenir XSS ───────────────────────────────
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── BADGE DE STATUS DINÂMICO ─────────────────────────────────────────────────
+function setBadge(online) {
+  var badge = document.getElementById('status-badge');
+  badge.textContent = online ? 'Online' : 'Offline';
+  badge.style.background = online ? '#00C851' : '#e53935';
+}
+fetch('/api/chamados?vertical=Contábil&portfolio=Portfólio Pequenas Contas')
+  .then(function(r) { setBadge(r.ok); })
+  .catch(function() { setBadge(false); });
+
 // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
 inpUser.addEventListener('input', function() {
   clearTimeout(acTimeout);
   selectedUser = null;
   inpUserVal.value = '';
+  inpUser.classList.remove('inp-warn');
   var q = inpUser.value.trim();
   if (q.length < 2) { acList.classList.remove('open'); return; }
   acTimeout = setTimeout(function() { fetchUsuarios(q); }, 300);
 });
 
+// Fecha ao clicar fora — usando blur apenas quando o foco não vai para a lista
 inpUser.addEventListener('blur', function() {
-  setTimeout(function() { acList.classList.remove('open'); }, 200);
+  setTimeout(function() {
+    if (!acList.contains(document.activeElement)) {
+      acList.classList.remove('open');
+      // Avisa se o usuário digitou algo mas não selecionou da lista
+      if (inpUser.value.trim() && !inpUserVal.value) {
+        inpUser.classList.add('inp-warn');
+      }
+    }
+  }, 150);
+});
+
+inpUser.addEventListener('focus', function() {
+  inpUser.classList.remove('inp-warn');
 });
 
 inpUser.addEventListener('keydown', function(e) {
@@ -209,7 +251,7 @@ inpUser.addEventListener('keydown', function(e) {
   if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(items, idx + 1); }
   if (e.key === 'ArrowUp')   { e.preventDefault(); setAcFocus(items, idx - 1); }
   if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].click(); }
-  if (e.key === 'Escape') acList.classList.remove('open');
+  if (e.key === 'Escape') { acList.classList.remove('open'); inpUser.blur(); }
 });
 
 function setAcFocus(items, idx) {
@@ -227,13 +269,24 @@ function fetchUsuarios(q) {
       users.forEach(function(u) {
         var item = document.createElement('div');
         item.className = 'autocomplete-item';
-        item.innerHTML = u.displayName + '<span>' + u.email + '</span>';
+        // mousedown antes do blur — previne que a lista feche antes do click
+        item.addEventListener('mousedown', function(e) { e.preventDefault(); });
         item.addEventListener('click', function() {
           selectedUser = u;
           inpUser.value = u.displayName;
           inpUserVal.value = u.name;
+          inpUser.classList.remove('inp-warn');
           acList.classList.remove('open');
         });
+        // Usa textContent para evitar XSS com dados do Jira
+        var nameEl = document.createElement('span');
+        nameEl.textContent = u.displayName;
+        var emailEl = document.createElement('span');
+        emailEl.style.fontSize = '11px';
+        emailEl.style.color = 'var(--text-secondary)';
+        emailEl.textContent = u.email;
+        item.appendChild(nameEl);
+        item.appendChild(emailEl);
         acList.appendChild(item);
       });
       acList.classList.add('open');
@@ -279,7 +332,7 @@ function buscar() {
     })
     .catch(function(err) {
       document.getElementById('results').innerHTML =
-        '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + err.message + '</div>';
+        '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
     })
     .finally(function() {
       btn.disabled = false;
@@ -335,12 +388,15 @@ function fmtDate(iso) {
 function renderTable(issues) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
   var rows = issues.map(function(i) {
+    // Validação da URL: só permite https:// para prevenir javascript: injection
+    var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://'))
+      ? escHtml(i.url) : '#';
     return '<tr>' +
-      '<td><a class="key-link" href="' + i.url + '" target="_blank">' + i.key + '</a></td>' +
-      '<td style="max-width:340px">' + i.summary + '</td>' +
+      '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
+      '<td style="max-width:340px">' + escHtml(i.summary) + '</td>' +
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
-      '<td style="font-size:12px;color:var(--text-secondary)">' + i.type + '</td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + fmtDate(i.updated) + '</td>' +
       '</tr>';
   }).join('');

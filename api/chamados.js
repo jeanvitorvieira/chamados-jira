@@ -54,7 +54,7 @@ module.exports = async function handler(req, res) {
   const jql = buildJql(params);
 
   // 3. Chama o Jira (uma página por vez — paginação feita no cliente)
-  const startAt = parseInt(req.query.startAt, 10) || 0;
+  const startAt = Math.max(0, parseInt(req.query.startAt, 10) || 0);
   let data;
   try {
     data = await searchIssues(jql, FIELDS, startAt);
