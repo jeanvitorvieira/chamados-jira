@@ -54,11 +54,13 @@ async function poll(config) {
     // Novos chamados = aparecem agora mas não estavam na última checagem
     const novos = data.issues.filter(i => !knownKeys.has(i.key));
 
+    // Sempre atualiza knownKeys — mesmo sem novidades, para detectar
+    // chamados que foram fechados e reabertos corretamente.
+    self._pollConfig = { ...config, knownKeys: allKeys };
+
     if (novos.length > 0) {
-      // Atualiza knownKeys e notifica a página
       notifyClients({ type: 'NEW_ISSUES', issues: novos, allKeys });
 
-      // Notificação do sistema
       const title = novos.length === 1
         ? `📋 Novo chamado: ${novos[0].key}`
         : `📋 ${novos.length} novos chamados`;
@@ -71,12 +73,9 @@ async function poll(config) {
         icon: '/icon.png',
         badge: '/icon.png',
         tag: 'chamados-update',
-        renotify: true,
+        renotify: false, // não re-exibe com som se a notificação já estiver visível
         data: { url: '/' },
       });
-
-      // Atualiza knownKeys no config do SW para a próxima checagem
-      self._pollConfig = { ...config, knownKeys: allKeys };
     }
   } catch { /* falha silenciosa */ }
 }

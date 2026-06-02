@@ -128,4 +128,4 @@ class ConfigError extends Error {
   }
 }
 
-module.exports = { searchIssues, searchUsers, JiraError, ConfigError };
+module.exports = { searchIssues, searchUsers, JiraError, ConfigError, _getConfig: getConfig };

@@ -8,7 +8,24 @@
  *   { ok: true, tipos: string[] }
  */
 
-const { JiraError, ConfigError } = require('./_lib/jira');
+const { ConfigError, JiraError } = require('./_lib/jira');
+
+// Reutiliza o cliente centralizado em vez de duplicar auth/timeout
+async function fetchIssuetypes() {
+  const { url, authHeader } = require('./_lib/jira')._getConfig();
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(`${url}/rest/api/2/issuetype`, {
+      signal: controller.signal,
+      headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
+    });
+    if (!r.ok) throw new JiraError(`HTTP ${r.status}`, r.status);
+    return r.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // Tipos que não fazem sentido exibir no contexto de atendimento
 const TIPOS_EXCLUIDOS = new Set([
@@ -27,29 +44,8 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
   }
 
-  const JIRA_URL      = process.env.JIRA_URL;
-  const JIRA_USER     = process.env.JIRA_USER;
-  const JIRA_PASSWORD = process.env.JIRA_PASSWORD;
-
-  if (!JIRA_URL || !JIRA_USER || !JIRA_PASSWORD) {
-    return res.status(500).json({ ok: false, error: 'Serviço não configurado.', code: 'CONFIG_ERROR' });
-  }
-
-  const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), 8000);
-
   try {
-    const credentials = 'Basic ' + Buffer.from(`${JIRA_USER}:${JIRA_PASSWORD}`).toString('base64');
-    const r = await fetch(`${JIRA_URL}/rest/api/2/issuetype`, {
-      signal: controller.signal,
-      headers: { 'Authorization': credentials, 'Accept': 'application/json' },
-    });
-
-    if (!r.ok) {
-      return res.status(502).json({ ok: false, error: 'Não foi possível buscar os tipos.', code: 'JIRA_ERROR' });
-    }
-
-    const data = await r.json();
+    const data  = await fetchIssuetypes();
     const tipos = data
       .filter(t => !t.subtask && !TIPOS_EXCLUIDOS.has(t.name))
       .map(t => t.name)
@@ -57,8 +53,9 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ ok: true, tipos });
   } catch (err) {
+    if (err instanceof ConfigError) {
+      return res.status(500).json({ ok: false, error: 'Serviço não configurado.', code: 'CONFIG_ERROR' });
+    }
     return res.status(502).json({ ok: false, error: 'Não foi possível buscar os tipos.', code: 'JIRA_ERROR' });
-  } finally {
-    clearTimeout(timeoutId);
   }
 };
