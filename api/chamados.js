@@ -87,7 +87,23 @@ module.exports = async function handler(req, res) {
  * Os valores já chegam escapados de validate.js.
  */
 function buildJql({ vertical, portfolio, user }) {
-  const clauses = ['statusCategory != Done', 'issuetype != "Melhoria"'];
+  const TIPOS_PERMITIDOS = [
+    'Incidente',
+    'Dúvida',
+    'Acompanhamento técnico',
+    'Configuração',
+    'Customização',
+    'Tratamento de dados',
+    'Treinamento',
+    'Serviço',
+    'Atualização de legislação',
+    'Permissão de Acesso',
+    'Comunicação ao Cliente',
+  ];
+  const clauses = [
+    'statusCategory != Done',
+    `issuetype in (${TIPOS_PERMITIDOS.map(t => `"${t}"`).join(', ')})`,
+  ];
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
