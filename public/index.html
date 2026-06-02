@@ -246,46 +246,35 @@ function buscar() {
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
   var user      = inpUserVal.value;
-  var baseParams = new URLSearchParams();
-  if (vertical)  baseParams.set('vertical',  vertical);
-  if (portfolio) baseParams.set('portfolio', portfolio);
-  if (user)      baseParams.set('user',      user);
+
+  // Exige pelo menos 2 filtros preenchidos
+  var preenchidos = [vertical, portfolio, user].filter(Boolean).length;
+  if (preenchidos < 2) {
+    document.getElementById('results').innerHTML =
+      '<div class="state"><div class="state-icon">⚠️</div>' +
+      'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
+      '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
+    document.getElementById('chips').style.display = 'none';
+    return;
+  }
+
+  var params = new URLSearchParams();
+  if (vertical)  params.set('vertical',  vertical);
+  if (portfolio) params.set('portfolio', portfolio);
+  if (user)      params.set('user',      user);
 
   var btn = document.getElementById('btn-buscar');
   btn.disabled = true;
+  btn.textContent = 'Buscando...';
   document.getElementById('chips').style.display = 'none';
   document.getElementById('results').innerHTML =
-    '<div class="state"><div class="spinner"></div><span id="loading-msg">Buscando chamados...</span></div>';
+    '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
 
-  // Paginação no cliente: busca página a página até ter todos os resultados
-  var allIssues = [];
-  var total = null;
-  var PAGE_SIZE = 100;
-
-  function fetchPage(startAt) {
-    var params = new URLSearchParams(baseParams);
-    params.set('startAt', startAt);
-
-    return fetch('/api/chamados?' + params.toString())
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
-        if (total === null) total = data.total;
-        allIssues = allIssues.concat(data.issues || []);
-
-        var loaded = allIssues.length;
-        var msgEl = document.getElementById('loading-msg');
-        if (msgEl) msgEl.textContent = 'Carregando... ' + loaded + ' de ' + total;
-
-        if (loaded < total) {
-          return fetchPage(startAt + PAGE_SIZE);
-        }
-      });
-  }
-
-  fetchPage(0)
-    .then(function() {
-      renderResults({ ok: true, total: total, issues: allIssues }, user);
+  fetch('/api/chamados?' + params.toString())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
+      renderResults(data, user);
       syncKnownKeys();
     })
     .catch(function(err) {
