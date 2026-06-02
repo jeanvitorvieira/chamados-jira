@@ -191,6 +191,11 @@
             <span class="arrow">▼</span>
           </button>
           <div class="multiselect-dropdown" id="tipo-dropdown">
+            <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
+              <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off"
+                style="width:100%;border:1.5px solid var(--gray-border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;outline:none;"
+                oninput="filtrarTipos(this.value)">
+            </div>
             <div class="multiselect-actions">
               <button onclick="selecionarTodosTipos()">Selecionar todos</button>
               <button onclick="limparTipos()">Limpar</button>
@@ -360,8 +365,24 @@ fetch('/api/tipos')
 function toggleTipoDropdown() {
   var btn = document.getElementById('tipo-btn');
   var dd  = document.getElementById('tipo-dropdown');
+  var isOpening = !dd.classList.contains('open');
   btn.classList.toggle('open');
   dd.classList.toggle('open');
+  if (isOpening) {
+    // Limpa a pesquisa ao abrir e foca no campo
+    var search = document.getElementById('tipo-search');
+    search.value = '';
+    filtrarTipos('');
+    setTimeout(function() { search.focus(); }, 50);
+  }
+}
+
+function filtrarTipos(q) {
+  var termo = q.toLowerCase();
+  document.querySelectorAll('#tipo-items .multiselect-item').forEach(function(item) {
+    var nome = item.textContent.trim().toLowerCase();
+    item.style.display = nome.includes(termo) ? '' : 'none';
+  });
 }
 
 function selecionarTodosTipos() {
