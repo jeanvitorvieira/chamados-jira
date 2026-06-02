@@ -18,7 +18,7 @@
  */
 
 const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
-const { validateSearchParams, validateTypes, ValidationError, TIPOS_PERMITIDOS } = require('./_lib/validate');
+const { validateSearchParams, validateTypes, ValidationError } = require('./_lib/validate');
 
 /** Campos retornados para cada issue. */
 const FIELDS = [
@@ -95,15 +95,13 @@ module.exports = async function handler(req, res) {
  * Os valores já chegam escapados de validate.js.
  */
 function buildJql({ vertical, portfolio, user }, selectedTypes) {
-  // Se o usuário selecionou tipos específicos usa eles; caso contrário usa todos os permitidos
-  const tipos = selectedTypes && selectedTypes.length > 0
-    ? selectedTypes
-    : [...TIPOS_PERMITIDOS];
+  const clauses = ['statusCategory != Done'];
 
-  const clauses = [
-    'statusCategory != Done',
-    `issuetype in (${tipos.map(t => `"${t}"`).join(', ')})`,
-  ];
+  // Só adiciona filtro de tipo se o usuário selecionou algum
+  // Os valores já chegam escapados de validateTypes()
+  if (selectedTypes && selectedTypes.length > 0) {
+    clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
+  }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);

@@ -327,16 +327,12 @@ function fetchUsuarios(q) {
 }
 
 // ── MULTI-SELECT TIPOS ───────────────────────────────────────────────────────
-var TIPOS = [
-  'Incidente', 'Dúvida', 'Acompanhamento técnico', 'Configuração',
-  'Customização', 'Tratamento de dados', 'Treinamento', 'Serviço',
-  'Atualização de legislação', 'Permissão de Acesso', 'Comunicação ao Cliente'
-];
-var tiposSelected = new Set(); // vazio = todos
+var tiposSelected = new Set(); // vazio = sem filtro (todos os tipos)
 
-(function initTipos() {
+function initTipos(tipos) {
   var container = document.getElementById('tipo-items');
-  TIPOS.forEach(function(tipo) {
+  container.innerHTML = '';
+  tipos.forEach(function(tipo) {
     var label = document.createElement('label');
     label.className = 'multiselect-item';
     var cb = document.createElement('input');
@@ -351,7 +347,15 @@ var tiposSelected = new Set(); // vazio = todos
     label.appendChild(document.createTextNode(tipo));
     container.appendChild(label);
   });
-})();
+}
+
+// Carrega tipos do Jira ao inicializar
+fetch('/api/tipos')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok && data.tipos) initTipos(data.tipos);
+  })
+  .catch(function() { /* falha silenciosa — dropdown fica vazio */ });
 
 function toggleTipoDropdown() {
   var btn = document.getElementById('tipo-btn');

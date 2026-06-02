@@ -8,20 +8,8 @@
  * num campo JQL poderia expor chamados de outros projetos.
  */
 
-/** Tipos de chamado permitidos — lista fechada para prevenção de JQL Injection. */
-const TIPOS_PERMITIDOS = new Set([
-  'Incidente',
-  'Dúvida',
-  'Acompanhamento técnico',
-  'Configuração',
-  'Customização',
-  'Tratamento de dados',
-  'Treinamento',
-  'Serviço',
-  'Atualização de legislação',
-  'Permissão de Acesso',
-  'Comunicação ao Cliente',
-]);
+/** Tipos de chamado — mantido para referência, mas não usado como lista fechada. */
+const TIPOS_PERMITIDOS = new Set([]);
 
 /** Verticais permitidas — valores confirmados no Jira. */
 const VERTICAIS_VALIDAS = new Set([
@@ -56,18 +44,20 @@ function escapeJqlValue(value) {
  * @returns {{ vertical: string|null, portfolio: string|null, user: string|null }}
  */
 /**
- * Valida a lista de tipos recebida como string CSV.
- * Retorna apenas os tipos que existem em TIPOS_PERMITIDOS.
- * Tipos desconhecidos são silenciosamente ignorados (não causam 400).
+ * Sanitiza a lista de tipos recebida como string CSV.
+ * Cada valor é escapado para uso seguro no JQL.
+ * Limite de 50 tipos por requisição para evitar JQL excessivamente longo.
  *
  * @param {string|undefined} typesParam - CSV ex: "Incidente,Dúvida"
- * @returns {string[]} Lista de tipos válidos, ou array vazio (= todos)
+ * @returns {string[]} Lista de tipos sanitizados, ou array vazio (= sem filtro)
  */
 function validateTypes(typesParam) {
   if (!typesParam || !typesParam.trim()) return [];
   return typesParam.split(',')
     .map(t => t.trim())
-    .filter(t => TIPOS_PERMITIDOS.has(t));
+    .filter(Boolean)
+    .slice(0, 50)
+    .map(t => escapeJqlValue(t));
 }
 
 function validateSearchParams({ vertical, portfolio, user }) {
