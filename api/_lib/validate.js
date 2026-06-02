@@ -10,8 +10,8 @@
 
 /** Verticais permitidas — lista fechada para validação estrita. */
 const VERTICAIS_VALIDAS = new Set([
-  'Arrecadação', 'Beth', 'Contábil', 'Contratos', 'Educação',
-  'Governo Digital', 'ISS', 'Pessoal', 'Saúde', 'Studio', 'Suite',
+  'Arrecadação', 'Contábil', 'Contratos', 'Educação',
+  'ISS', 'Pessoal', 'Saúde',
 ]);
 
 /** Portfólios permitidos — lista fechada. */
