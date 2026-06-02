@@ -104,7 +104,7 @@
   .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
   .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
   /* Segunda linha de filtros */
-  .filters-grid-2 { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
+  .filters-grid-2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
   /* Multi-select de tipos */
   .multiselect-wrap { position: relative; }
   .multiselect-btn { width: 100%; border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: border-color .15s; }
@@ -183,6 +183,15 @@
     </div>
 
     <div class="filters-grid-2">
+      <div class="form-group">
+        <label>Período (última atualização)</label>
+        <select id="sel-days">
+          <option value="0">Qualquer data</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+      </div>
       <div class="form-group">
         <label>Tipo de chamado</label>
         <div class="multiselect-wrap" id="tipo-wrap">
@@ -447,6 +456,8 @@ function buscar() {
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
   if (tiposSelected.size > 0) params.set('types', [...tiposSelected].join(','));
+  var days = document.getElementById('sel-days').value;
+  if (days && days !== '0') params.set('days', days);
 
   var btn = document.getElementById('btn-buscar');
   btn.disabled = true;

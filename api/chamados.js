@@ -18,7 +18,7 @@
  */
 
 const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
-const { validateSearchParams, validateTypes, ValidationError } = require('./_lib/validate');
+const { validateSearchParams, validateTypes, validateDays, ValidationError } = require('./_lib/validate');
 
 /** Campos retornados para cada issue. */
 const FIELDS = [
@@ -50,11 +50,12 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Valida tipos selecionados (CSV, ex: "Incidente,Dúvida")
+  // 2. Valida tipos e período
   const selectedTypes = validateTypes(req.query.types);
+  const days          = validateDays(req.query.days);
 
   // 3. Constrói JQL
-  const jql = buildJql(params, selectedTypes);
+  const jql = buildJql(params, selectedTypes, days);
 
   // 4. Chama o Jira (uma página por vez — paginação feita no cliente)
   const startAt = Math.max(0, parseInt(req.query.startAt, 10) || 0);
@@ -94,7 +95,7 @@ module.exports = async function handler(req, res) {
  * Constrói a expressão JQL a partir dos parâmetros validados.
  * Os valores já chegam escapados de validate.js.
  */
-function buildJql({ vertical, portfolio, user }, selectedTypes) {
+function buildJql({ vertical, portfolio, user }, selectedTypes, days) {
   const clauses = ['statusCategory != Done'];
 
   // Só adiciona filtro de tipo se o usuário selecionou algum
@@ -105,6 +106,7 @@ function buildJql({ vertical, portfolio, user }, selectedTypes) {
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
+  if (days > 0)  clauses.push(`updated >= -${days}d`);
 
   if (user) {
     // Traz chamados sem dono OU atribuídos ao usuário especificado

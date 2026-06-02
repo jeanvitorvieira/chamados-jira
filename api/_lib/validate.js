@@ -60,6 +60,20 @@ function validateTypes(typesParam) {
     .map(t => escapeJqlValue(t));
 }
 
+/** Valores de período permitidos (em dias). 0 = sem limite. */
+const DIAS_VALIDOS = new Set([0, 30, 60, 90]);
+
+/**
+ * Valida o parâmetro de período em dias.
+ * @param {string|undefined} daysParam
+ * @returns {number} 0 = sem filtro de data
+ */
+function validateDays(daysParam) {
+  const n = parseInt(daysParam, 10);
+  if (isNaN(n)) return 0;
+  return DIAS_VALIDOS.has(n) ? n : 0;
+}
+
 function validateSearchParams({ vertical, portfolio, user }) {
   // Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
@@ -120,6 +134,7 @@ module.exports = {
   validateSearchParams,
   validateUserQuery,
   validateTypes,
+  validateDays,
   ValidationError,
   TIPOS_PERMITIDOS,
   VERTICAIS_VALIDAS,
