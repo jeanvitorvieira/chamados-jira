@@ -10,14 +10,8 @@
 
 /** Verticais permitidas — valores confirmados no Jira. */
 const VERTICAIS_VALIDAS = new Set([
-<<<<<<< HEAD
-  'Arrecadação', 'Atendimento', 'Contábil', 'Contratos', 'Educação',
-  'ISS', 'Parceiro de Negócios', 'Parceiros', 'Pessoal', 'Plataforma',
-  'Revenda', 'Saúde', 'Tecnologia',
-=======
-  'Arrecadação', 'Contábil', 'Contratos', 'Educação',
-  'ISS', 'Pessoal', 'Saúde',
->>>>>>> b327fcdbd3d7ac96e1ce0127e746bbad61471f5d
+  'Arrecadação', 'Atendimento', 'Compras/Contratos', 'Contábil',
+  'Educação', 'Pessoal', 'Saúde',
 ]);
 
 /** Portfólios permitidos — valores confirmados no Jira. */
