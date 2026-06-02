@@ -47,28 +47,32 @@ function getConfig() {
 async function request(path, options = {}) {
   const { url, authHeader } = getConfig();
 
-  // Timeout explícito de 8s — deixa margem para o Vercel processar a resposta
-  // dentro do limite de 10s do plano gratuito.
-  const signal = AbortSignal.timeout(8000);
+  // Timeout explícito de 8s via AbortController — compatível com Node 16+.
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 8000);
 
-  const response = await fetch(`${url}${path}`, {
-    ...options,
-    signal,
-    headers: {
-      'Authorization': authHeader,
-      'Content-Type':  'application/json',
-      'Accept':        'application/json',
-      ...(options.headers ?? {}),
-    },
-  });
+  try {
+    const response = await fetch(`${url}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type':  'application/json',
+        'Accept':        'application/json',
+        ...(options.headers ?? {}),
+      },
+    });
 
-  if (!response.ok) {
-    let detail = '';
-    try { detail = await response.text(); } catch { /* ignore */ }
-    throw new JiraError(`HTTP ${response.status}`, response.status, detail);
+    if (!response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch { /* ignore */ }
+      throw new JiraError(`HTTP ${response.status}`, response.status, detail);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
 
 // ── MÉTODOS DE DOMÍNIO ────────────────────────────────────────────────────────
