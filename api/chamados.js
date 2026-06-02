@@ -65,7 +65,11 @@ module.exports = async function handler(req, res) {
     }
     if (err instanceof JiraError) {
       console.error(`[chamados] Erro Jira ${err.status}:`, err.detail);
-      return res.status(502).json({ ok: false, error: `Erro ao consultar o Jira: ${err.message}`, code: 'JIRA_ERROR' });
+      // 400 geralmente significa que um valor do filtro não existe no Jira
+      if (err.status === 400) {
+        return res.status(400).json({ ok: false, error: 'Filtro inválido — um dos valores selecionados não existe no Jira.', code: 'INVALID_FILTER' });
+      }
+      return res.status(502).json({ ok: false, error: 'Não foi possível conectar ao Jira. Tente novamente.', code: 'JIRA_ERROR' });
     }
     throw err; // erro inesperado — deixa o Vercel logar
   }
