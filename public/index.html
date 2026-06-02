@@ -29,276 +29,75 @@
     --radius-sm:      8px;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: var(--gray-bg);
-    color: var(--text-primary);
-    min-height: 100vh;
-  }
-
-  /* ── HEADER ── */
-  header {
-    background: var(--blue-primary);
-    color: var(--white);
-    padding: 0 24px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 8px rgba(0,0,0,.18);
-    position: sticky; top: 0; z-index: 100;
-  }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--gray-bg); color: var(--text-primary); min-height: 100vh; }
+  header { background: var(--blue-primary); color: var(--white); padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.18); position: sticky; top: 0; z-index: 100; }
   .header-brand { display: flex; align-items: center; gap: 12px; }
-  .header-logo {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: var(--orange);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 18px; color: var(--white);
-    flex-shrink: 0;
-  }
+  .header-logo { width: 36px; height: 36px; border-radius: 8px; background: var(--orange); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; color: var(--white); flex-shrink: 0; }
   .header-title { font-size: 16px; font-weight: 700; line-height: 1.2; }
   .header-subtitle { font-size: 11px; opacity: .75; font-weight: 400; }
-  .status-badge {
-    background: #00C851; color: #fff;
-    font-size: 10px; font-weight: 700;
-    padding: 3px 10px; border-radius: 99px;
-    letter-spacing: .04em;
-  }
   .header-right { display: flex; align-items: center; gap: 10px; }
-  .btn-notif {
-    background: rgba(255,255,255,.15);
-    border: 1.5px solid rgba(255,255,255,.3);
-    color: #fff; border-radius: var(--radius-sm);
-    padding: 6px 13px; font-size: 12px; font-weight: 600;
-    cursor: pointer; display: flex; align-items: center; gap: 6px;
-    transition: background .15s;
-  }
+  .status-badge { background: #00C851; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 99px; letter-spacing: .04em; }
+  .btn-notif { background: rgba(255,255,255,.15); border: 1.5px solid rgba(255,255,255,.3); color: #fff; border-radius: var(--radius-sm); padding: 6px 13px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s; }
   .btn-notif:hover { background: rgba(255,255,255,.25); }
-  .btn-notif.active {
-    background: var(--orange); border-color: var(--orange-dark);
-  }
-  .btn-notif .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #ccc; flex-shrink: 0;
-  }
+  .btn-notif.active { background: var(--orange); border-color: var(--orange-dark); }
+  .btn-notif .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
   .btn-notif.active .dot { background: #fff; animation: pulse 1.5s infinite; }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; } 50% { opacity: .4; }
-  }
-  /* toast */
-  #toast {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--blue-dark); color: #fff;
-    padding: 12px 20px; border-radius: var(--radius-sm);
-    font-size: 13px; font-weight: 600; box-shadow: var(--shadow-md);
-    opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200;
-    white-space: nowrap;
-  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--blue-dark); color: #fff; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-md); opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; white-space: nowrap; }
   #toast.show { opacity: 1; }
-  /* banner novos chamados */
-  .new-issues-banner {
-    background: var(--orange-light);
-    border: 1.5px solid var(--orange);
-    border-radius: var(--radius-sm);
-    padding: 10px 16px; margin-bottom: 16px;
-    font-size: 13px; font-weight: 600; color: var(--orange-dark);
-    display: flex; align-items: center; gap: 8px;
-    animation: fadeIn .4s;
-  }
+  .new-issues-banner { background: var(--orange-light); border: 1.5px solid var(--orange); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px; font-size: 13px; font-weight: 600; color: var(--orange-dark); display: flex; align-items: center; gap: 8px; animation: fadeIn .4s; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-
-  /* ── MAIN LAYOUT ── */
   main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
-
-  /* ── FILTER CARD ── */
-  .filter-card {
-    background: var(--white);
-    border-radius: var(--radius);
-    border: 1.5px solid var(--gray-border);
-    box-shadow: var(--shadow-sm);
-    padding: 20px 24px;
-    margin-bottom: 24px;
-  }
-  .filter-card h2 {
-    font-size: 15px; font-weight: 700;
-    color: var(--blue-primary);
-    margin-bottom: 16px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .filter-card h2::before {
-    content: ''; display: inline-block;
-    width: 4px; height: 18px; border-radius: 2px;
-    background: var(--orange);
-  }
-  .filters-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 12px;
-    align-items: end;
-  }
-  @media (max-width: 700px) {
-    .filters-grid { grid-template-columns: 1fr 1fr; }
-  }
+  .filter-card { background: var(--white); border-radius: var(--radius); border: 1.5px solid var(--gray-border); box-shadow: var(--shadow-sm); padding: 20px 24px; margin-bottom: 24px; }
+  .filter-card h2 { font-size: 15px; font-weight: 700; color: var(--blue-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .filter-card h2::before { content: ''; display: inline-block; width: 4px; height: 18px; border-radius: 2px; background: var(--orange); }
+  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  @media (max-width: 700px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
   .form-group { display: flex; flex-direction: column; gap: 5px; }
-  .form-group label {
-    font-size: 11px; font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase; letter-spacing: .05em;
-  }
-  .form-group select,
-  .form-group input {
-    border: 1.5px solid var(--gray-border);
-    border-radius: var(--radius-sm);
-    padding: 9px 12px;
-    font-size: 13px;
-    color: var(--text-primary);
-    background: var(--white);
-    outline: none;
-    transition: border-color .15s;
-    width: 100%;
-  }
-  .form-group select:focus,
-  .form-group input:focus { border-color: var(--blue-mid); }
-
-  /* autocomplete wrapper */
+  .form-group label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
+  .form-group select, .form-group input { border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); outline: none; transition: border-color .15s; width: 100%; }
+  .form-group select:focus, .form-group input:focus { border-color: var(--blue-mid); }
   .autocomplete-wrap { position: relative; }
-  .autocomplete-list {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-    background: var(--white);
-    border: 1.5px solid var(--gray-border);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-md);
-    z-index: 50; max-height: 220px; overflow-y: auto;
-    display: none;
-  }
+  .autocomplete-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 50; max-height: 220px; overflow-y: auto; display: none; }
   .autocomplete-list.open { display: block; }
-  .autocomplete-item {
-    padding: 9px 12px; cursor: pointer;
-    font-size: 13px;
-    border-bottom: 1px solid var(--gray-bg);
-    display: flex; flex-direction: column; gap: 2px;
-  }
+  .autocomplete-item { padding: 9px 12px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--gray-bg); display: flex; flex-direction: column; gap: 2px; }
   .autocomplete-item:last-child { border-bottom: none; }
-  .autocomplete-item:hover, .autocomplete-item.selected {
-    background: var(--blue-light);
-  }
+  .autocomplete-item:hover, .autocomplete-item.selected { background: var(--blue-light); }
   .autocomplete-item span { font-size: 11px; color: var(--text-secondary); }
-
-  .btn-buscar {
-    background: var(--blue-primary);
-    color: var(--white);
-    border: none; border-radius: var(--radius-sm);
-    padding: 10px 20px;
-    font-size: 13px; font-weight: 700;
-    cursor: pointer;
-    transition: background .15s;
-    white-space: nowrap;
-    height: 40px;
-  }
+  .btn-buscar { background: var(--blue-primary); color: var(--white); border: none; border-radius: var(--radius-sm); padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; white-space: nowrap; height: 40px; }
   .btn-buscar:hover { background: var(--blue-dark); }
   .btn-buscar:disabled { opacity: .5; cursor: not-allowed; }
-
-  /* ── SUMMARY CHIPS ── */
-  .summary-chips {
-    display: flex; gap: 10px; flex-wrap: wrap;
-    margin-bottom: 20px;
-  }
-  .chip {
-    background: var(--white);
-    border: 1.5px solid var(--gray-border);
-    border-radius: var(--radius-sm);
-    padding: 8px 16px;
-    font-size: 13px;
-    box-shadow: var(--shadow-sm);
-    display: flex; align-items: center; gap: 8px;
-  }
+  .summary-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .chip { background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 8px; }
   .chip-num { font-size: 20px; font-weight: 800; color: var(--blue-primary); }
   .chip-label { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
   .chip.orange .chip-num { color: var(--orange-dark); }
-  .chip.green .chip-num  { color: var(--green); }
-
-  /* ── SECTION ── */
-  .section {
-    background: var(--white);
-    border-radius: var(--radius);
-    border: 1.5px solid var(--gray-border);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 16px;
-    overflow: hidden;
-  }
-  .section-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--gray-border);
-    display: flex; align-items: center; gap: 10px;
-    background: var(--white);
-  }
+  .chip.green .chip-num { color: var(--green); }
+  .section { background: var(--white); border-radius: var(--radius); border: 1.5px solid var(--gray-border); box-shadow: var(--shadow-sm); margin-bottom: 16px; overflow: hidden; }
+  .section-header { padding: 14px 20px; border-bottom: 1px solid var(--gray-border); display: flex; align-items: center; gap: 10px; }
   .section-header h3 { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-  .tag {
-    display: inline-flex; align-items: center;
-    padding: 2px 10px; border-radius: 99px;
-    font-size: 11px; font-weight: 700;
-    margin-left: auto;
-  }
+  .tag { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; margin-left: auto; }
   .tag-warning { background: var(--yellow-light); color: #7B5800; }
-  .tag-blue    { background: var(--blue-light);   color: var(--blue-primary); }
-  .tag-green   { background: var(--green-light);  color: var(--green); }
-
-  /* ── TABLE ── */
+  .tag-blue { background: var(--blue-light); color: var(--blue-primary); }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th {
-    text-align: left; padding: 10px 14px;
-    font-size: 11px; font-weight: 700;
-    color: var(--text-secondary);
-    text-transform: uppercase; letter-spacing: .05em;
-    background: var(--gray-bg);
-    border-bottom: 1px solid var(--gray-border);
-    white-space: nowrap;
-  }
+  thead th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; background: var(--gray-bg); border-bottom: 1px solid var(--gray-border); white-space: nowrap; }
   tbody td { padding: 11px 14px; border-bottom: 1px solid #F3F5FA; vertical-align: middle; }
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: #F8FAFF; }
-  .key-link {
-    color: var(--blue-mid); text-decoration: none;
-    font-weight: 700; font-size: 12px;
-  }
+  .key-link { color: var(--blue-mid); text-decoration: none; font-weight: 700; font-size: 12px; }
   .key-link:hover { text-decoration: underline; }
-
-  .pri-badge {
-    display: inline-block; padding: 2px 8px;
-    border-radius: 4px; font-size: 11px; font-weight: 700;
-  }
-  .pri-1 { background: var(--red-light);    color: var(--red); }
+  .pri-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .pri-1 { background: var(--red-light); color: var(--red); }
   .pri-2 { background: var(--yellow-light); color: #7B5800; }
-  .pri-3 { background: #F3F4F6;             color: var(--text-secondary); }
-  .pri-4 { background: #F3F4F6;             color: var(--text-secondary); }
-
-  .status-pill {
-    display: inline-block; padding: 3px 9px;
-    border-radius: 5px; font-size: 11px; font-weight: 600;
-    white-space: nowrap;
-  }
-
-  /* ── ESTADO VAZIO / LOADING / ERRO ── */
-  .state {
-    text-align: center; padding: 36px;
-    color: var(--text-secondary); font-size: 13px;
-  }
+  .pri-3 { background: #F3F4F6; color: var(--text-secondary); }
+  .pri-4 { background: #F3F4F6; color: var(--text-secondary); }
+  .status-pill { display: inline-block; padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .state { text-align: center; padding: 36px; color: var(--text-secondary); font-size: 13px; }
   .state-icon { font-size: 32px; margin-bottom: 8px; }
-  .spinner {
-    width: 24px; height: 24px;
-    border: 3px solid var(--blue-light);
-    border-top-color: var(--blue-primary);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-    margin: 0 auto 10px;
-  }
+  .spinner { width: 24px; height: 24px; border: 3px solid var(--blue-light); border-top-color: var(--blue-primary); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  .placeholder-msg {
-    text-align: center; padding: 60px 20px;
-    color: var(--text-secondary); font-size: 14px;
-  }
+  .placeholder-msg { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 14px; }
   .placeholder-msg .big { font-size: 40px; margin-bottom: 10px; }
 </style>
 </head>
@@ -317,14 +116,12 @@
       <span class="dot"></span>
       <span id="notif-label">Ativar alertas</span>
     </button>
-    <span class="status-badge" id="status-badge">Online</span>
+    <span class="status-badge">Online</span>
   </div>
 </header>
 <div id="toast"></div>
 
 <main>
-
-  <!-- FILTROS -->
   <div class="filter-card">
     <h2>Filtros</h2>
     <div class="filters-grid">
@@ -366,63 +163,49 @@
     </div>
   </div>
 
-  <!-- CHIPS DE RESUMO -->
   <div class="summary-chips" id="chips" style="display:none">
-    <div class="chip">
-      <div>
-        <div class="chip-num" id="chip-total">0</div>
-        <div class="chip-label">Total</div>
-      </div>
-    </div>
-    <div class="chip orange">
-      <div>
-        <div class="chip-num" id="chip-unassigned">0</div>
-        <div class="chip-label">Sem responsável</div>
-      </div>
-    </div>
-    <div class="chip green">
-      <div>
-        <div class="chip-num" id="chip-mine">0</div>
-        <div class="chip-label">Do responsável selecionado</div>
-      </div>
-    </div>
+    <div class="chip"><div><div class="chip-num" id="chip-total">0</div><div class="chip-label">Total</div></div></div>
+    <div class="chip orange"><div><div class="chip-num" id="chip-unassigned">0</div><div class="chip-label">Sem responsável</div></div></div>
+    <div class="chip green"><div><div class="chip-num" id="chip-mine">0</div><div class="chip-label">Do responsável selecionado</div></div></div>
   </div>
 
-  <!-- RESULTADOS -->
   <div id="results">
     <div class="placeholder-msg">
       <div class="big">🔍</div>
       Selecione os filtros e clique em <strong>Buscar</strong> para ver os chamados.
     </div>
   </div>
-
 </main>
 
 <script>
-// ── AUTOCOMPLETE DE USUÁRIO ──────────────────────────────────────────────────
-let acTimeout = null;
-let selectedUser = null;
+var acTimeout = null;
+var selectedUser = null;
+var notifAtivo = false;
+var knownKeys = [];
+try { knownKeys = JSON.parse(localStorage.getItem('notif_knownKeys') || '[]'); } catch(e) {}
 
-const inpUser    = document.getElementById('inp-user');
-const inpUserVal = document.getElementById('inp-user-val');
-const acList     = document.getElementById('autocomplete-list');
+var inpUser = document.getElementById('inp-user');
+var inpUserVal = document.getElementById('inp-user-val');
+var acList = document.getElementById('autocomplete-list');
 
-inpUser.addEventListener('input', () => {
+// ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
+inpUser.addEventListener('input', function() {
   clearTimeout(acTimeout);
   selectedUser = null;
   inpUserVal.value = '';
-  const q = inpUser.value.trim();
+  var q = inpUser.value.trim();
   if (q.length < 2) { acList.classList.remove('open'); return; }
-  acTimeout = setTimeout(() => fetchUsuarios(q), 300);
+  acTimeout = setTimeout(function() { fetchUsuarios(q); }, 300);
 });
 
-inpUser.addEventListener('blur', () => {
-  setTimeout(() => acList.classList.remove('open'), 200);
+inpUser.addEventListener('blur', function() {
+  setTimeout(function() { acList.classList.remove('open'); }, 200);
 });
 
-inpUser.addEventListener('keydown', e => {
-  const items = acList.querySelectorAll('.autocomplete-item');
-  let idx = [...items].findIndex(i => i.classList.contains('selected'));
+inpUser.addEventListener('keydown', function(e) {
+  var items = acList.querySelectorAll('.autocomplete-item');
+  var arr = Array.prototype.slice.call(items);
+  var idx = arr.findIndex(function(i) { return i.classList.contains('selected'); });
   if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(items, idx + 1); }
   if (e.key === 'ArrowUp')   { e.preventDefault(); setAcFocus(items, idx - 1); }
   if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].click(); }
@@ -430,117 +213,254 @@ inpUser.addEventListener('keydown', e => {
 });
 
 function setAcFocus(items, idx) {
-  items.forEach(i => i.classList.remove('selected'));
+  Array.prototype.forEach.call(items, function(i) { i.classList.remove('selected'); });
   if (idx >= 0 && idx < items.length) items[idx].classList.add('selected');
 }
 
-async function fetchUsuarios(q) {
-  try {
-    const r = await fetch(`/api/usuarios?q=${encodeURIComponent(q)}`);
-    const data = await r.json();
-    const users = data.users ?? [];
-    acList.innerHTML = '';
-    if (!users.length) { acList.classList.remove('open'); return; }
-    users.forEach(u => {
-      const item = document.createElement('div');
-      item.className = 'autocomplete-item';
-      item.innerHTML = `${u.displayName}<span>${u.email}</span>`;
-      item.addEventListener('click', () => {
-        selectedUser = u;
-        inpUser.value    = u.displayName;
-        inpUserVal.value = u.name;
-        acList.classList.remove('open');
+function fetchUsuarios(q) {
+  fetch('/api/usuarios?q=' + encodeURIComponent(q))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var users = data.users || [];
+      acList.innerHTML = '';
+      if (!users.length) { acList.classList.remove('open'); return; }
+      users.forEach(function(u) {
+        var item = document.createElement('div');
+        item.className = 'autocomplete-item';
+        item.innerHTML = u.displayName + '<span>' + u.email + '</span>';
+        item.addEventListener('click', function() {
+          selectedUser = u;
+          inpUser.value = u.displayName;
+          inpUserVal.value = u.name;
+          acList.classList.remove('open');
+        });
+        acList.appendChild(item);
       });
-      acList.appendChild(item);
-    });
-    acList.classList.add('open');
-  } catch { acList.classList.remove('open'); }
+      acList.classList.add('open');
+    })
+    .catch(function() { acList.classList.remove('open'); });
 }
 
-// ── BUSCA PRINCIPAL ──────────────────────────────────────────────────────────
-async function buscar() {
-  const vertical  = document.getElementById('sel-vertical').value;
-  const portfolio = document.getElementById('sel-portfolio').value;
-  const user      = inpUserVal.value;
-
-  const params = new URLSearchParams();
+// ── BUSCA ────────────────────────────────────────────────────────────────────
+function buscar() {
+  var vertical  = document.getElementById('sel-vertical').value;
+  var portfolio = document.getElementById('sel-portfolio').value;
+  var user      = inpUserVal.value;
+  var params    = new URLSearchParams();
   if (vertical)  params.set('vertical',  vertical);
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
 
-  const btn = document.getElementById('btn-buscar');
+  var btn = document.getElementById('btn-buscar');
   btn.disabled = true;
-  btn.textContent = 'Buscando…';
-
-  document.getElementById('results').innerHTML = `
-    <div class="state"><div class="spinner"></div>Buscando chamados no Jira…</div>`;
+  btn.textContent = 'Buscando...';
+  document.getElementById('results').innerHTML = '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
   document.getElementById('chips').style.display = 'none';
 
-  try {
-    const r = await fetch(`/api/chamados?${params}`);
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error ?? 'Erro desconhecido');
-    renderResults(data, user);
-  } catch (err) {
-    document.getElementById('results').innerHTML = `
-      <div class="state">
-        <div class="state-icon">⚠️</div>
-        <strong>Erro ao buscar:</strong> ${err.message}
-      </div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔍 Buscar';
-  }
+  fetch('/api/chamados?' + params.toString())
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
+      renderResults(data, user);
+      syncKnownKeys();
+    })
+    .catch(function(err) {
+      document.getElementById('results').innerHTML =
+        '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + err.message + '</div>';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = '🔍 Buscar';
+    });
 }
 
+document.querySelectorAll('select').forEach(function(el) {
+  el.addEventListener('keydown', function(e) { if (e.key === 'Enter') buscar(); });
+});
+
 // ── RENDERIZAÇÃO ─────────────────────────────────────────────────────────────
-const STATUS_BG = {
-  'Aguardando Manutenção':              '#FFF8E1',
-  'Aguardando aprovação do solicitante':'#E3F2FD',
-  'Em andamento':                        '#E8F5E9',
-  'Não iniciada':                        '#F3F4F6',
-  'Aberto':                              '#EDE9FE',
-  'Reaberto':                            '#FFEBEE',
-  'In Progress':                         '#E8F5E9',
-  'Open':                                '#EDE9FE',
+var STATUS_BG = {
+  'Aguardando Manutencao': '#FFF8E1',
+  'Aguardando Manutenção': '#FFF8E1',
+  'Aguardando aprovacao do solicitante': '#E3F2FD',
+  'Aguardando aprovação do solicitante': '#E3F2FD',
+  'Em andamento': '#E8F5E9',
+  'Nao iniciada': '#F3F4F6',
+  'Não iniciada': '#F3F4F6',
+  'Aberto': '#EDE9FE',
+  'Reaberto': '#FFEBEE'
 };
-const STATUS_COLOR = {
-  'Aguardando Manutenção':              '#7B5800',
-  'Aguardando aprovação do solicitante':'#1565C0',
-  'Em andamento':                        '#2E7D32',
-  'Não iniciada':                        '#5A6680',
-  'Aberto':                              '#4527A0',
-  'Reaberto':                            '#C62828',
-  'In Progress':                         '#2E7D32',
-  'Open':                                '#4527A0',
+var STATUS_COLOR = {
+  'Aguardando Manutencao': '#7B5800',
+  'Aguardando Manutenção': '#7B5800',
+  'Aguardando aprovacao do solicitante': '#1565C0',
+  'Aguardando aprovação do solicitante': '#1565C0',
+  'Em andamento': '#2E7D32',
+  'Nao iniciada': '#5A6680',
+  'Não iniciada': '#5A6680',
+  'Aberto': '#4527A0',
+  'Reaberto': '#C62828'
 };
 
-function statusPill(status) {
-  const bg  = STATUS_BG[status]    || '#F3F4F6';
-  const col = STATUS_COLOR[status] || '#5A6680';
-  return `<span class="status-pill" style="background:${bg};color:${col}">${status}</span>`;
+function statusPill(s) {
+  return '<span class="status-pill" style="background:' + (STATUS_BG[s] || '#F3F4F6') + ';color:' + (STATUS_COLOR[s] || '#5A6680') + '">' + s + '</span>';
 }
 
 function priBadge(p) {
-  const map = { 'Highest':'1','High':'2','Medium':'3','Low':'4','Lowest':'4',
-                '1':'1','2':'2','3':'3','4':'4','5':'4' };
-  const n = map[p] || '3';
-  return `<span class="pri-badge pri-${n}">P${n}</span>`;
+  var map = {'Highest':'1','High':'2','Medium':'3','Low':'4','Lowest':'4','1':'1','2':'2','3':'3','4':'4','5':'4'};
+  var n = map[p] || '3';
+  return '<span class="pri-badge pri-' + n + '">P' + n + '</span>';
 }
 
 function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' }) + ' ' +
-         d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  if (!iso) return '--';
+  var d = new Date(iso);
+  return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' ' +
+         d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
 function renderTable(issues) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
-  const rows = issues.map(i => `
-    <tr>
-      <td><a class="key-link" href="${i.url}" target="_blank">${i.key}</a></td>
-      <td style="max-width:340px">${i.summary}</td>
-      <td>${statusPill(i.status)}</td>
-      <td>${priBadge(i.priority)}</td>
-      <td style="font-size:12px;color:var(--text-secondary)">
+  var rows = issues.map(function(i) {
+    return '<tr>' +
+      '<td><a class="key-link" href="' + i.url + '" target="_blank">' + i.key + '</a></td>' +
+      '<td style="max-width:340px">' + i.summary + '</td>' +
+      '<td>' + statusPill(i.status) + '</td>' +
+      '<td>' + priBadge(i.priority) + '</td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + i.type + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + fmtDate(i.updated) + '</td>' +
+      '</tr>';
+  }).join('');
+  return '<div class="table-wrap"><table>' +
+    '<thead><tr><th>Chamado</th><th>Resumo</th><th>Status</th><th>Prior.</th><th>Tipo</th><th>Atualizado</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderResults(data, userKey) {
+  var issues = data.issues || [];
+  var unassigned = issues.filter(function(i) { return !i.assignee; });
+  var assigned   = issues.filter(function(i) { return !!i.assignee; });
+  var userName   = (selectedUser && selectedUser.displayName) || userKey || null;
+
+  document.getElementById('chip-total').textContent      = data.total || issues.length;
+  document.getElementById('chip-unassigned').textContent = unassigned.length;
+  document.getElementById('chip-mine').textContent       = assigned.length;
+  document.getElementById('chips').style.display         = 'flex';
+
+  document.getElementById('results').innerHTML =
+    '<div class="section">' +
+      '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
+      renderTable(unassigned) +
+    '</div>' +
+    '<div class="section">' +
+      '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + userName : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
+      renderTable(assigned) +
+    '</div>';
+}
+
+function syncKnownKeys() {
+  setTimeout(function() {
+    var links = document.querySelectorAll('.key-link');
+    knownKeys = Array.prototype.map.call(links, function(l) { return l.textContent.trim(); });
+    try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+    if (notifAtivo) pushConfigToSW();
+  }, 800);
+}
+
+// ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
+function getConfig() {
+  return {
+    vertical:  document.getElementById('sel-vertical').value,
+    portfolio: document.getElementById('sel-portfolio').value,
+    user:      inpUserVal.value,
+    knownKeys: knownKeys
+  };
+}
+
+function pushConfigToSW() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(function(reg) {
+    if (reg.active) reg.active.postMessage({ type: 'START_POLLING', payload: getConfig() });
+  });
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'NEW_ISSUES') return;
+    knownKeys = e.data.allKeys;
+    try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+    var novos = e.data.issues;
+    document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+    var label = novos.length === 1
+      ? '1 novo chamado: <strong>' + novos[0].key + '</strong> — ' + novos[0].summary.slice(0, 70)
+      : novos.length + ' novos chamados detectados';
+    var banner = document.createElement('div');
+    banner.className = 'new-issues-banner';
+    banner.innerHTML = '🔔 ' + label + ' <button onclick="buscar()" style="margin-left:auto;background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Atualizar lista</button>';
+    document.getElementById('results').insertAdjacentElement('beforebegin', banner);
+  });
+}
+
+function toggleNotificacoes() {
+  if (notifAtivo) {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(function(reg) {
+        if (reg.active) reg.active.postMessage({ type: 'STOP_POLLING' });
+      });
+    }
+    notifAtivo = false;
+    updateNotifBtn();
+    showToast('🔕 Alertas desativados.');
+    return;
+  }
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    showToast('⚠️ Seu navegador não suporta notificações.'); return;
+  }
+  Notification.requestPermission().then(function(perm) {
+    if (perm !== 'granted') { showToast('❌ Permissão de notificação negada.'); return; }
+    var cfg = getConfig();
+    if (!cfg.vertical && !cfg.portfolio && !cfg.user) {
+      showToast('⚠️ Defina pelo menos um filtro antes de ativar os alertas.'); return;
+    }
+    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user})); } catch(e) {}
+    navigator.serviceWorker.register('/sw.js').then(function() {
+      return navigator.serviceWorker.ready;
+    }).then(function() {
+      pushConfigToSW();
+      notifAtivo = true;
+      updateNotifBtn();
+      showToast('✅ Alertas ativados! Você será notificado a cada 5 min.');
+    });
+  });
+}
+
+function updateNotifBtn() {
+  document.getElementById('btn-notif').classList.toggle('active', notifAtivo);
+  document.getElementById('notif-label').textContent = notifAtivo ? 'Alertas ativos' : 'Ativar alertas';
+}
+
+var toastTimer;
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
+}
+
+// Restaura alertas ao recarregar
+try {
+  var savedCfg = localStorage.getItem('notif_config');
+  if (savedCfg && Notification.permission === 'granted') {
+    navigator.serviceWorker.register('/sw.js').then(function() {
+      return navigator.serviceWorker.ready;
+    }).then(function() {
+      pushConfigToSW();
+      notifAtivo = true;
+      updateNotifBtn();
+    });
+  }
+} catch(e) {}
+</script>
+</body>
+</html>
