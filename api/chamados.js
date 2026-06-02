@@ -18,7 +18,7 @@
  */
 
 const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
-const { validateSearchParams, ValidationError } = require('./_lib/validate');
+const { validateSearchParams, validateTypes, ValidationError, TIPOS_PERMITIDOS } = require('./_lib/validate');
 
 /** Campos retornados para cada issue. */
 const FIELDS = [
@@ -50,10 +50,13 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Constrói JQL
-  const jql = buildJql(params);
+  // 2. Valida tipos selecionados (CSV, ex: "Incidente,Dúvida")
+  const selectedTypes = validateTypes(req.query.types);
 
-  // 3. Chama o Jira (uma página por vez — paginação feita no cliente)
+  // 3. Constrói JQL
+  const jql = buildJql(params, selectedTypes);
+
+  // 4. Chama o Jira (uma página por vez — paginação feita no cliente)
   const startAt = Math.max(0, parseInt(req.query.startAt, 10) || 0);
   let data;
   try {
@@ -91,23 +94,15 @@ module.exports = async function handler(req, res) {
  * Constrói a expressão JQL a partir dos parâmetros validados.
  * Os valores já chegam escapados de validate.js.
  */
-function buildJql({ vertical, portfolio, user }) {
-  const TIPOS_PERMITIDOS = [
-    'Incidente',
-    'Dúvida',
-    'Acompanhamento técnico',
-    'Configuração',
-    'Customização',
-    'Tratamento de dados',
-    'Treinamento',
-    'Serviço',
-    'Atualização de legislação',
-    'Permissão de Acesso',
-    'Comunicação ao Cliente',
-  ];
+function buildJql({ vertical, portfolio, user }, selectedTypes) {
+  // Se o usuário selecionou tipos específicos usa eles; caso contrário usa todos os permitidos
+  const tipos = selectedTypes && selectedTypes.length > 0
+    ? selectedTypes
+    : [...TIPOS_PERMITIDOS];
+
   const clauses = [
     'statusCategory != Done',
-    `issuetype in (${TIPOS_PERMITIDOS.map(t => `"${t}"`).join(', ')})`,
+    `issuetype in (${tipos.map(t => `"${t}"`).join(', ')})`,
   ];
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);

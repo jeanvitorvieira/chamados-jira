@@ -8,6 +8,21 @@
  * num campo JQL poderia expor chamados de outros projetos.
  */
 
+/** Tipos de chamado permitidos — lista fechada para prevenção de JQL Injection. */
+const TIPOS_PERMITIDOS = new Set([
+  'Incidente',
+  'Dúvida',
+  'Acompanhamento técnico',
+  'Configuração',
+  'Customização',
+  'Tratamento de dados',
+  'Treinamento',
+  'Serviço',
+  'Atualização de legislação',
+  'Permissão de Acesso',
+  'Comunicação ao Cliente',
+]);
+
 /** Verticais permitidas — valores confirmados no Jira. */
 const VERTICAIS_VALIDAS = new Set([
   'Arrecadação', 'Atendimento', 'Compras/Contratos', 'Contábil',
@@ -40,6 +55,21 @@ function escapeJqlValue(value) {
  * @param {{ vertical?: string, portfolio?: string, user?: string }} params
  * @returns {{ vertical: string|null, portfolio: string|null, user: string|null }}
  */
+/**
+ * Valida a lista de tipos recebida como string CSV.
+ * Retorna apenas os tipos que existem em TIPOS_PERMITIDOS.
+ * Tipos desconhecidos são silenciosamente ignorados (não causam 400).
+ *
+ * @param {string|undefined} typesParam - CSV ex: "Incidente,Dúvida"
+ * @returns {string[]} Lista de tipos válidos, ou array vazio (= todos)
+ */
+function validateTypes(typesParam) {
+  if (!typesParam || !typesParam.trim()) return [];
+  return typesParam.split(',')
+    .map(t => t.trim())
+    .filter(t => TIPOS_PERMITIDOS.has(t));
+}
+
 function validateSearchParams({ vertical, portfolio, user }) {
   // Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
@@ -99,7 +129,9 @@ class ValidationError extends Error {
 module.exports = {
   validateSearchParams,
   validateUserQuery,
+  validateTypes,
   ValidationError,
+  TIPOS_PERMITIDOS,
   VERTICAIS_VALIDAS,
   PORTFOLIOS_VALIDOS,
 };

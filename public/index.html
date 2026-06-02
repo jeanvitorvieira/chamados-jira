@@ -103,6 +103,24 @@
   .inp-warn::placeholder { color: var(--orange-dark); }
   .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
   .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
+  /* Segunda linha de filtros */
+  .filters-grid-2 { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
+  /* Multi-select de tipos */
+  .multiselect-wrap { position: relative; }
+  .multiselect-btn { width: 100%; border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: border-color .15s; }
+  .multiselect-btn:hover, .multiselect-btn.open { border-color: var(--blue-mid); }
+  .multiselect-btn .arrow { font-size: 10px; color: var(--text-secondary); transition: transform .15s; }
+  .multiselect-btn.open .arrow { transform: rotate(180deg); }
+  .multiselect-badge { background: var(--blue-primary); color: #fff; border-radius: 99px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .multiselect-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 50; display: none; }
+  .multiselect-dropdown.open { display: block; }
+  .multiselect-actions { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--gray-bg); }
+  .multiselect-actions button { font-size: 11px; color: var(--blue-mid); background: none; border: none; cursor: pointer; padding: 0; font-weight: 600; }
+  .multiselect-actions button:hover { text-decoration: underline; }
+  .multiselect-items { max-height: 220px; overflow-y: auto; padding: 4px 0; }
+  .multiselect-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
+  .multiselect-item:hover { background: var(--gray-bg); }
+  .multiselect-item input[type=checkbox] { accent-color: var(--blue-primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -162,6 +180,26 @@
         </div>
       </div>
       <button class="btn-buscar" id="btn-buscar" onclick="buscar()">🔍 Buscar</button>
+    </div>
+
+    <div class="filters-grid-2">
+      <div class="form-group">
+        <label>Tipo de chamado</label>
+        <div class="multiselect-wrap" id="tipo-wrap">
+          <button type="button" class="multiselect-btn" id="tipo-btn" onclick="toggleTipoDropdown()">
+            <span id="tipo-label">Todos os tipos</span>
+            <span class="arrow">▼</span>
+          </button>
+          <div class="multiselect-dropdown" id="tipo-dropdown">
+            <div class="multiselect-actions">
+              <button onclick="selecionarTodosTipos()">Selecionar todos</button>
+              <button onclick="limparTipos()">Limpar</button>
+            </div>
+            <div class="multiselect-items" id="tipo-items"></div>
+          </div>
+        </div>
+      </div>
+      <div></div>
     </div>
   </div>
 
@@ -288,6 +326,80 @@ function fetchUsuarios(q) {
     .catch(function() { acList.classList.remove('open'); });
 }
 
+// ── MULTI-SELECT TIPOS ───────────────────────────────────────────────────────
+var TIPOS = [
+  'Incidente', 'Dúvida', 'Acompanhamento técnico', 'Configuração',
+  'Customização', 'Tratamento de dados', 'Treinamento', 'Serviço',
+  'Atualização de legislação', 'Permissão de Acesso', 'Comunicação ao Cliente'
+];
+var tiposSelected = new Set(); // vazio = todos
+
+(function initTipos() {
+  var container = document.getElementById('tipo-items');
+  TIPOS.forEach(function(tipo) {
+    var label = document.createElement('label');
+    label.className = 'multiselect-item';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = tipo;
+    cb.addEventListener('change', function() {
+      if (cb.checked) tiposSelected.add(tipo);
+      else tiposSelected.delete(tipo);
+      atualizarTipoLabel();
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(tipo));
+    container.appendChild(label);
+  });
+})();
+
+function toggleTipoDropdown() {
+  var btn = document.getElementById('tipo-btn');
+  var dd  = document.getElementById('tipo-dropdown');
+  btn.classList.toggle('open');
+  dd.classList.toggle('open');
+}
+
+function selecionarTodosTipos() {
+  tiposSelected.clear();
+  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) {
+    cb.checked = false;
+  });
+  atualizarTipoLabel();
+}
+
+function limparTipos() { selecionarTodosTipos(); }
+
+function atualizarTipoLabel() {
+  var label = document.getElementById('tipo-label');
+  var btn   = document.getElementById('tipo-btn');
+  if (tiposSelected.size === 0) {
+    label.innerHTML = 'Todos os tipos';
+    var badge = btn.querySelector('.multiselect-badge');
+    if (badge) badge.remove();
+  } else {
+    label.textContent = tiposSelected.size === 1
+      ? [...tiposSelected][0]
+      : tiposSelected.size + ' tipos';
+    var existing = btn.querySelector('.multiselect-badge');
+    if (!existing) {
+      var b = document.createElement('span');
+      b.className = 'multiselect-badge';
+      btn.querySelector('.arrow').before(b);
+    }
+    btn.querySelector('.multiselect-badge').textContent = tiposSelected.size;
+  }
+}
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('tipo-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('tipo-btn').classList.remove('open');
+    document.getElementById('tipo-dropdown').classList.remove('open');
+  }
+});
+
 // ── BUSCA ────────────────────────────────────────────────────────────────────
 function buscar() {
   var vertical  = document.getElementById('sel-vertical').value;
@@ -309,6 +421,7 @@ function buscar() {
   if (vertical)  params.set('vertical',  vertical);
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
+  if (tiposSelected.size > 0) params.set('types', [...tiposSelected].join(','));
 
   var btn = document.getElementById('btn-buscar');
   btn.disabled = true;
