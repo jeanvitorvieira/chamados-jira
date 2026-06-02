@@ -64,32 +64,22 @@ async function request(path, options = {}) {
 // ── MÉTODOS DE DOMÍNIO ────────────────────────────────────────────────────────
 
 /**
- * Busca todas as issues via JQL, paginando automaticamente até esgotar os resultados.
- * O Jira limita cada página a 100 registros; esta função encadeia as páginas
- * e devolve um objeto compatível com o formato de uma única resposta.
+ * Busca uma página de issues via JQL.
+ * A paginação é feita no cliente: cada chamada retorna até PAGE_SIZE registros
+ * a partir de startAt, mantendo cada invocação da serverless function dentro
+ * do timeout de 10s do Vercel (plano gratuito).
  *
  * @param {string}   jql
- * @param {string[]} fields - Lista de campos a retornar
+ * @param {string[]} fields
+ * @param {number}   [startAt=0]
+ * @param {number}   [pageSize=100]
  * @returns {Promise<{ issues: any[], total: number }>}
  */
-async function searchIssues(jql, fields) {
-  const PAGE_SIZE = 100;
-  let startAt = 0;
-  let total = null;
-  const allIssues = [];
-
-  do {
-    const page = await request('/rest/api/2/search', {
-      method: 'POST',
-      body: JSON.stringify({ jql, fields, maxResults: PAGE_SIZE, startAt }),
-    });
-
-    if (total === null) total = page.total;
-    allIssues.push(...(page.issues ?? []));
-    startAt += PAGE_SIZE;
-  } while (startAt < total);
-
-  return { issues: allIssues, total };
+async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
+  return request('/rest/api/2/search', {
+    method: 'POST',
+    body: JSON.stringify({ jql, fields, maxResults: pageSize, startAt }),
+  });
 }
 
 /**

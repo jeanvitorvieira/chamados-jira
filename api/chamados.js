@@ -53,10 +53,11 @@ module.exports = async function handler(req, res) {
   // 2. Constrói JQL
   const jql = buildJql(params);
 
-  // 3. Chama o Jira
+  // 3. Chama o Jira (uma página por vez — paginação feita no cliente)
+  const startAt = parseInt(req.query.startAt, 10) || 0;
   let data;
   try {
-    data = await searchIssues(jql, FIELDS);
+    data = await searchIssues(jql, FIELDS, startAt);
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error('[chamados] Configuração inválida:', err.message);

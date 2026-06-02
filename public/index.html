@@ -246,22 +246,46 @@ function buscar() {
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
   var user      = inpUserVal.value;
-  var params    = new URLSearchParams();
-  if (vertical)  params.set('vertical',  vertical);
-  if (portfolio) params.set('portfolio', portfolio);
-  if (user)      params.set('user',      user);
+  var baseParams = new URLSearchParams();
+  if (vertical)  baseParams.set('vertical',  vertical);
+  if (portfolio) baseParams.set('portfolio', portfolio);
+  if (user)      baseParams.set('user',      user);
 
   var btn = document.getElementById('btn-buscar');
   btn.disabled = true;
-  btn.textContent = 'Buscando...';
-  document.getElementById('results').innerHTML = '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
   document.getElementById('chips').style.display = 'none';
+  document.getElementById('results').innerHTML =
+    '<div class="state"><div class="spinner"></div><span id="loading-msg">Buscando chamados...</span></div>';
 
-  fetch('/api/chamados?' + params.toString())
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
-      renderResults(data, user);
+  // Paginação no cliente: busca página a página até ter todos os resultados
+  var allIssues = [];
+  var total = null;
+  var PAGE_SIZE = 100;
+
+  function fetchPage(startAt) {
+    var params = new URLSearchParams(baseParams);
+    params.set('startAt', startAt);
+
+    return fetch('/api/chamados?' + params.toString())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
+        if (total === null) total = data.total;
+        allIssues = allIssues.concat(data.issues || []);
+
+        var loaded = allIssues.length;
+        var msgEl = document.getElementById('loading-msg');
+        if (msgEl) msgEl.textContent = 'Carregando... ' + loaded + ' de ' + total;
+
+        if (loaded < total) {
+          return fetchPage(startAt + PAGE_SIZE);
+        }
+      });
+  }
+
+  fetchPage(0)
+    .then(function() {
+      renderResults({ ok: true, total: total, issues: allIssues }, user);
       syncKnownKeys();
     })
     .catch(function(err) {
