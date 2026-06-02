@@ -1,0 +1,15 @@
+{
+  "name": "chamados-jira",
+  "version": "1.0.0",
+  "description": "Painel de chamados Jira por vertical e responsável — Betha Sistemas",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "devDependencies": {
+    "vercel": "^34.0.0"
+  }
+}

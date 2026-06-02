@@ -1,0 +1,10 @@
+# Variáveis de ambiente — NUNCA commitar arquivos com credenciais
+.env
+.env.local
+.env.*.local
+
+# Dependências
+node_modules/
+
+# Vercel
+.vercel/
