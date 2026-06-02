@@ -455,7 +455,14 @@ function pushConfigToSW() {
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', function(e) {
-    if (!e.data || e.data.type !== 'NEW_ISSUES') return;
+    if (!e.data) return;
+    // Baseline definido na primeira execução — salva sem notificar
+    if (e.data.type === 'BASELINE_SET') {
+      knownKeys = e.data.allKeys;
+      try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(ex) {}
+      return;
+    }
+    if (e.data.type !== 'NEW_ISSUES') return;
     knownKeys = e.data.allKeys;
     try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
     var novos = e.data.issues;

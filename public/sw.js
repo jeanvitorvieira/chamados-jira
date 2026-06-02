@@ -41,13 +41,21 @@ async function poll(config) {
 
     const currentKeys = new Set(data.issues.map(i => i.key));
     const knownKeys   = new Set(config.knownKeys || []);
+    const allKeys     = [...currentKeys];
+
+    // Primeira execução sem baseline: apenas salva os IDs atuais sem notificar.
+    // Isso evita spam de "N novos chamados" ao ativar os alertas pela primeira vez.
+    if (knownKeys.size === 0) {
+      self._pollConfig = { ...config, knownKeys: allKeys };
+      notifyClients({ type: 'BASELINE_SET', allKeys });
+      return;
+    }
 
     // Novos chamados = aparecem agora mas não estavam na última checagem
     const novos = data.issues.filter(i => !knownKeys.has(i.key));
 
     if (novos.length > 0) {
       // Atualiza knownKeys e notifica a página
-      const allKeys = [...currentKeys];
       notifyClients({ type: 'NEW_ISSUES', issues: novos, allKeys });
 
       // Notificação do sistema
