@@ -33,7 +33,10 @@ async function poll(config) {
     const params = new URLSearchParams();
     if (config.vertical)  params.set('vertical',  config.vertical);
     if (config.portfolio) params.set('portfolio', config.portfolio);
-    if (config.user)      params.set('user',       config.user);
+    if (config.user)      params.set('user',      config.user);
+    // Inclui types e days para que as notificações reflitam os filtros ativos na UI
+    if (config.types)     params.set('types',     config.types);
+    if (config.days)      params.set('days',      config.days);
 
     const r    = await fetch(`/api/chamados?${params}`);
     const data = await r.json();

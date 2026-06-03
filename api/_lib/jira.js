@@ -104,7 +104,8 @@ async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
  * @returns {Promise<any[]>}
  */
 async function searchUsers(query, maxResults = 10) {
-  const qs = new URLSearchParams({ username: query, maxResults });
+  const safeMax = Number.isFinite(maxResults) ? maxResults : 10;
+  const qs = new URLSearchParams({ username: query, maxResults: safeMax });
   return request(`/rest/api/2/user/search?${qs}`);
 }
 

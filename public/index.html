@@ -265,7 +265,9 @@ function setBadge(online) {
   badge.textContent = online ? 'Online' : 'Offline';
   badge.style.background = online ? '#00C851' : '#e53935';
 }
-fetch('/api/chamados?vertical=Contábil&portfolio=Portfólio Pequenas Contas')
+// Health-check leve: usa /api/tipos (sem parâmetros, resposta cacheada 1h)
+// Evita bater no Jira a cada abertura de página com uma query real
+fetch('/api/tipos')
   .then(function(r) { setBadge(r.ok); })
   .catch(function() { setBadge(false); });
 
@@ -668,10 +670,14 @@ function syncKnownKeysFromData(data) {
 
 // ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
 function getConfig() {
+  var days  = document.getElementById('sel-days').value;
+  var types = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
   return {
     vertical:  document.getElementById('sel-vertical').value,
     portfolio: document.getElementById('sel-portfolio').value,
     user:      inpUserVal.value,
+    days:      days !== '0' ? days : '',
+    types:     types,
     knownKeys: knownKeys
   };
 }
@@ -728,7 +734,7 @@ function toggleNotificacoes() {
     if (!cfg.vertical && !cfg.portfolio && !cfg.user) {
       showToast('⚠️ Defina pelo menos um filtro antes de ativar os alertas.'); return;
     }
-    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user})); } catch(e) {}
+    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user, days: cfg.days, types: cfg.types})); } catch(e) {}
     navigator.serviceWorker.register('/sw.js').then(function() {
       return navigator.serviceWorker.ready;
     }).then(function() {
