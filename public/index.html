@@ -51,7 +51,7 @@
   .filter-card { background: var(--white); border-radius: var(--radius); border: 1.5px solid var(--gray-border); box-shadow: var(--shadow-sm); padding: 20px 24px; margin-bottom: 24px; }
   .filter-card h2 { font-size: 15px; font-weight: 700; color: var(--blue-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .filter-card h2::before { content: ''; display: inline-block; width: 4px; height: 18px; border-radius: 2px; background: var(--orange); }
-  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: end; }
   @media (max-width: 700px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
   .form-group { display: flex; flex-direction: column; gap: 5px; }
   .form-group label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
@@ -64,9 +64,6 @@
   .autocomplete-item:last-child { border-bottom: none; }
   .autocomplete-item:hover, .autocomplete-item.selected { background: var(--blue-light); }
   .autocomplete-item span { font-size: 11px; color: var(--text-secondary); }
-  .btn-buscar { background: var(--blue-primary); color: var(--white); border: none; border-radius: var(--radius-sm); padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; white-space: nowrap; height: 40px; }
-  .btn-buscar:hover { background: var(--blue-dark); }
-  .btn-buscar:disabled { opacity: .5; cursor: not-allowed; }
   .summary-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
   .chip { background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 8px; }
   .chip-num { font-size: 20px; font-weight: 800; color: var(--blue-primary); }
@@ -106,12 +103,18 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .placeholder-msg { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 14px; }
   .placeholder-msg .big { font-size: 40px; margin-bottom: 10px; }
+  /* Refresh bar */
+  .refresh-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+  .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .refresh-dot.pulsing { animation: pulse 1.5s infinite; }
+  .refresh-progress { flex: 1; height: 3px; background: var(--gray-border); border-radius: 99px; overflow: hidden; }
+  .refresh-progress-bar { height: 100%; background: var(--blue-primary); border-radius: 99px; transition: width 1s linear; }
   .inp-warn { border-color: var(--orange) !important; }
   .inp-warn::placeholder { color: var(--orange-dark); }
   .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
   .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
   /* Segunda linha de filtros */
-  .filters-grid-2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
+  .filters-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
   /* Multi-select de tipos */
   .multiselect-wrap { position: relative; }
   .multiselect-btn { width: 100%; border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: border-color .15s; }
@@ -186,7 +189,13 @@
           <span class="inp-hint">Selecione um usuário da lista</span>
         </div>
       </div>
-      <button class="btn-buscar" id="btn-buscar" onclick="buscar()">🔍 Buscar</button>
+    </div>
+
+    <div id="refresh-bar" class="refresh-bar" style="display:none">
+      <span class="refresh-dot" id="refresh-dot"></span>
+      <span id="refresh-label">—</span>
+      <div class="refresh-progress"><div class="refresh-progress-bar" id="refresh-progress-bar" style="width:100%"></div></div>
+      <button onclick="buscar()" style="background:none;border:none;cursor:pointer;color:var(--blue-mid);font-size:12px;white-space:nowrap;padding:0">↻ Agora</button>
     </div>
 
     <div class="filters-grid-2">
@@ -220,7 +229,6 @@
           </div>
         </div>
       </div>
-      <div></div>
     </div>
   </div>
 
@@ -233,17 +241,21 @@
   <div id="results">
     <div class="placeholder-msg">
       <div class="big">🔍</div>
-      Selecione os filtros e clique em <strong>Buscar</strong> para ver os chamados.
+      Selecione pelo menos 2 filtros para ver os chamados.
     </div>
   </div>
 </main>
 
 <script>
-var acTimeout = null;
-var selectedUser = null;
-var notifAtivo = false;
-var knownKeys = [];
-try { knownKeys = JSON.parse(localStorage.getItem('notif_knownKeys') || '[]'); } catch(e) {}
+var acTimeout        = null;
+var selectedUser     = null;
+var notifAtivo       = false;
+var buscaAtiva       = false; // true após a primeira busca bem-sucedida
+var autoRefreshTimer = null;  // setInterval do countdown de atualização
+var refreshCountdown = 0;
+var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
+var knownIssues = {};         // { [key]: { status, assignee } }
+try { knownIssues = JSON.parse(localStorage.getItem('notif_knownIssues') || '{}'); } catch(e) {}
 
 var inpUser = document.getElementById('inp-user');
 var inpUserVal = document.getElementById('inp-user-val');
@@ -335,6 +347,7 @@ function fetchUsuarios(q) {
           inpUserVal.value = u.name;
           inpUser.classList.remove('inp-warn');
           acList.classList.remove('open');
+          buscar(); // auto-search ao selecionar responsável
         });
         // Usa textContent para evitar XSS com dados do Jira
         var nameEl = document.createElement('span');
@@ -379,6 +392,7 @@ function initTipos(tipos) {
       if (cb.checked) tiposSelected.add(key);
       else tiposSelected.delete(key);
       atualizarTipoLabel();
+      if (buscaAtiva) buscar(); // auto-search ao alterar tipo (só após primeira busca)
     });
     label.appendChild(cb);
     label.appendChild(document.createTextNode(name));
@@ -457,30 +471,34 @@ document.addEventListener('click', function(e) {
 });
 
 // ── BUSCA ────────────────────────────────────────────────────────────────────
-function buscar() {
+function buscar(silencioso) {
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
   var user      = inpUserVal.value;
 
   // Bloqueia se o usuário digitou no campo responsável mas não selecionou da lista
   if (inpUser.value.trim() && !user) {
-    inpUser.classList.add('inp-warn');
-    document.getElementById('results').innerHTML =
-      '<div class="state"><div class="state-icon">⚠️</div>' +
-      'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
-      '</div>';
-    document.getElementById('chips').style.display = 'none';
+    if (!silencioso) {
+      inpUser.classList.add('inp-warn');
+      document.getElementById('results').innerHTML =
+        '<div class="state"><div class="state-icon">⚠️</div>' +
+        'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
+        '</div>';
+      document.getElementById('chips').style.display = 'none';
+    }
     return;
   }
 
   // Exige pelo menos 2 filtros preenchidos
   var preenchidos = [vertical, portfolio, user].filter(Boolean).length;
   if (preenchidos < 2) {
-    document.getElementById('results').innerHTML =
-      '<div class="state"><div class="state-icon">⚠️</div>' +
-      'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
-      '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
-    document.getElementById('chips').style.display = 'none';
+    if (!silencioso) {
+      document.getElementById('results').innerHTML =
+        '<div class="state"><div class="state-icon">⚠️</div>' +
+        'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
+        '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
+      document.getElementById('chips').style.display = 'none';
+    }
     return;
   }
 
@@ -489,40 +507,50 @@ function buscar() {
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
   if (tiposSelected.size > 0) {
-    // Envia todos os IDs de todos os tipos selecionados (ex: "1,10015,3")
-    var allIds = [...tiposSelected].join(',');
-    params.set('typeIds', allIds);
+    params.set('typeIds', [...tiposSelected].join(','));
   }
   var days = document.getElementById('sel-days').value;
   if (days && days !== '0') params.set('days', days);
 
-  var btn = document.getElementById('btn-buscar');
-  btn.disabled = true;
-  btn.textContent = 'Buscando...';
-  document.getElementById('chips').style.display = 'none';
-  document.getElementById('results').innerHTML =
-    '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
+  if (!silencioso) {
+    document.getElementById('chips').style.display = 'none';
+    document.getElementById('results').innerHTML =
+      '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
+    pararPolling(); // para countdown enquanto busca manualmente
+  }
 
   fetch('/api/chamados?' + params.toString())
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
+
+      // Detecta novidades antes de atualizar o baseline
+      if (buscaAtiva) detectarNovidades(data);
+
       renderResults(data, user);
-      syncKnownKeysFromData(data);
+      atualizarKnownIssues(data);
+
+      if (!buscaAtiva) {
+        buscaAtiva = true;
+        iniciarPolling();
+      } else {
+        agendarProximoRefresh(); // reagenda após refresh silencioso
+      }
     })
     .catch(function(err) {
-      document.getElementById('results').innerHTML =
-        '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
-    })
-    .finally(function() {
-      btn.disabled = false;
-      btn.textContent = '🔍 Buscar';
+      if (!silencioso) {
+        document.getElementById('results').innerHTML =
+          '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
+      }
+      if (buscaAtiva) agendarProximoRefresh(); // reagenda mesmo com erro
     });
 }
 
-document.querySelectorAll('select').forEach(function(el) {
-  el.addEventListener('keydown', function(e) { if (e.key === 'Enter') buscar(); });
-});
+// Auto-search ao alterar qualquer filtro
+document.getElementById('sel-vertical').addEventListener('change', function() { buscar(); });
+document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
+document.getElementById('sel-days').addEventListener('change', function() { if (buscaAtiva) buscar(); });
+
 // Enter no campo responsável (quando lista fechada)
 inpUser.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
@@ -672,11 +700,97 @@ function renderResults(data, userKey) {
     '</div>';
 }
 
-function syncKnownKeysFromData(data) {
+function atualizarKnownIssues(data) {
   var all = (data.unassigned || []).concat(data.assigned || []);
-  knownKeys = all.map(function(i) { return i.key; });
-  try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+  all.forEach(function(i) {
+    knownIssues[i.key] = { status: i.status, assignee: i.assignee || null };
+  });
+  try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(e) {}
   if (notifAtivo) pushConfigToSW();
+}
+
+// ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
+function iniciarPolling() {
+  document.getElementById('refresh-bar').style.display = 'flex';
+  agendarProximoRefresh();
+}
+
+function pararPolling() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  var bar = document.getElementById('refresh-bar');
+  if (bar) bar.style.display = 'none';
+}
+
+function agendarProximoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  refreshCountdown = REFRESH_INTERVAL;
+  atualizarBarraRefresh();
+  autoRefreshTimer = setInterval(function() {
+    refreshCountdown--;
+    atualizarBarraRefresh();
+    if (refreshCountdown <= 0) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+      document.getElementById('refresh-label').textContent = 'Atualizando...';
+      document.getElementById('refresh-dot').classList.remove('pulsing');
+      buscar(true); // refresh silencioso
+    }
+  }, 1000);
+}
+
+function atualizarBarraRefresh() {
+  var pct = Math.round((refreshCountdown / REFRESH_INTERVAL) * 100);
+  document.getElementById('refresh-progress-bar').style.width = pct + '%';
+  document.getElementById('refresh-dot').classList.add('pulsing');
+  document.getElementById('refresh-label').textContent = 'Atualiza em ' + refreshCountdown + 's';
+}
+
+// ── DETECÇÃO DE NOVIDADES ─────────────────────────────────────────────────────
+function detectarNovidades(data) {
+  if (Object.keys(knownIssues).length === 0) return; // sem baseline ainda
+
+  var unassigned = data.unassigned || [];
+  var assigned   = data.assigned   || [];
+
+  // Novos chamados sem responsável (não existiam no baseline)
+  var novosUnassigned = unassigned.filter(function(i) { return !knownIssues[i.key]; });
+
+  // Mudança de status em chamados atribuídos
+  var statusAlterado = assigned.filter(function(i) {
+    var prev = knownIssues[i.key];
+    return prev && prev.status !== i.status;
+  }).map(function(i) {
+    return Object.assign({}, i, { prevStatus: knownIssues[i.key].status });
+  });
+
+  if (novosUnassigned.length > 0) {
+    var label = novosUnassigned.length === 1
+      ? '1 novo chamado sem responsável: <strong>' + escHtml(novosUnassigned[0].key) + '</strong> — ' + escHtml(novosUnassigned[0].summary.slice(0, 60))
+      : novosUnassigned.length + ' novos chamados sem responsável detectados';
+    exibirBanner('🔔 ' + label, 'warning');
+  }
+
+  if (statusAlterado.length > 0) {
+    var label2 = statusAlterado.length === 1
+      ? 'Status alterado em <strong>' + escHtml(statusAlterado[0].key) + '</strong>: ' + escHtml(statusAlterado[0].prevStatus) + ' → ' + escHtml(statusAlterado[0].status)
+      : statusAlterado.length + ' chamados com status alterado';
+    exibirBanner('🔄 ' + label2, 'info');
+  }
+}
+
+function exibirBanner(html, tipo) {
+  var isWarning = tipo === 'warning';
+  document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+  var banner = document.createElement('div');
+  banner.className = 'new-issues-banner';
+  if (!isWarning) {
+    banner.style.background   = 'var(--blue-light)';
+    banner.style.borderColor  = 'var(--blue-mid)';
+    banner.style.color        = 'var(--blue-primary)';
+  }
+  banner.innerHTML = html +
+    ' <button onclick="buscar()" style="margin-left:auto;background:' + (isWarning ? 'var(--orange)' : 'var(--blue-mid)') + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
+  document.getElementById('results').insertAdjacentElement('beforebegin', banner);
 }
 
 // ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
@@ -684,12 +798,12 @@ function getConfig() {
   var days    = document.getElementById('sel-days').value;
   var typeIds = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
   return {
-    vertical:  document.getElementById('sel-vertical').value,
-    portfolio: document.getElementById('sel-portfolio').value,
-    user:      inpUserVal.value,
-    days:      days !== '0' ? days : '',
-    typeIds:   typeIds,
-    knownKeys: knownKeys
+    vertical:    document.getElementById('sel-vertical').value,
+    portfolio:   document.getElementById('sel-portfolio').value,
+    user:        inpUserVal.value,
+    days:        days !== '0' ? days : '',
+    typeIds:     typeIds,
+    knownIssues: knownIssues
   };
 }
 
@@ -703,24 +817,35 @@ function pushConfigToSW() {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', function(e) {
     if (!e.data) return;
-    // Baseline definido na primeira execução — salva sem notificar
+
     if (e.data.type === 'BASELINE_SET') {
-      knownKeys = e.data.allKeys;
-      try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(ex) {}
+      knownIssues = e.data.knownIssues || {};
+      try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(ex) {}
       return;
     }
-    if (e.data.type !== 'NEW_ISSUES') return;
-    knownKeys = e.data.allKeys;
-    try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
-    var novos = e.data.issues;
-    document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
-    var label = novos.length === 1
-      ? '1 novo chamado: <strong>' + novos[0].key + '</strong> — ' + novos[0].summary.slice(0, 70)
-      : novos.length + ' novos chamados detectados';
-    var banner = document.createElement('div');
-    banner.className = 'new-issues-banner';
-    banner.innerHTML = '🔔 ' + label + ' <button onclick="buscar()" style="margin-left:auto;background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Atualizar lista</button>';
-    document.getElementById('results').insertAdjacentElement('beforebegin', banner);
+
+    if (e.data.type === 'NEW_UNASSIGNED' && e.data.issues && e.data.issues.length > 0) {
+      knownIssues = e.data.knownIssues || knownIssues;
+      var novos = e.data.issues;
+      var label = novos.length === 1
+        ? '1 novo chamado sem responsável: <strong>' + escHtml(novos[0].key) + '</strong> — ' + escHtml(novos[0].summary.slice(0, 60))
+        : novos.length + ' novos chamados sem responsável';
+      exibirBanner('🔔 ' + label, 'warning');
+    }
+
+    if (e.data.type === 'STATUS_CHANGED' && e.data.issues && e.data.issues.length > 0) {
+      knownIssues = e.data.knownIssues || knownIssues;
+      var changed = e.data.issues;
+      var label2 = changed.length === 1
+        ? 'Status alterado em <strong>' + escHtml(changed[0].key) + '</strong>: ' + escHtml(changed[0].prevStatus) + ' → ' + escHtml(changed[0].status)
+        : changed.length + ' chamados com status alterado';
+      exibirBanner('🔄 ' + label2, 'info');
+    }
+
+    if (e.data.type === 'POLL_DONE') {
+      knownIssues = e.data.knownIssues || knownIssues;
+      try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(ex) {}
+    }
   });
 }
 
