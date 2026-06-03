@@ -244,7 +244,7 @@ var buscaAtiva       = false; // true após a primeira busca bem-sucedida
 var autoRefreshTimer = null;  // setInterval do countdown de atualização
 var refreshCountdown = 0;
 var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
-var knownIssues = {};         // { [key]: { status, assignee } } — baseline do ciclo atual
+var knownIssues = {};         // { [key]: { status, assignee, updated } } — baseline do ciclo atual
 
 var inpUser = document.getElementById('inp-user');
 var inpUserVal = document.getElementById('inp-user-val');
@@ -529,6 +529,7 @@ function buscar(silencioso) {
 
       if (!buscaAtiva) {
         buscaAtiva = true;
+        pedirPermissaoNotificacao();
         iniciarPolling();
       } else {
         agendarProximoRefresh(); // reagenda após refresh silencioso
@@ -701,8 +702,27 @@ function atualizarKnownIssues(data) {
   knownIssues = {};
   var all = (data.unassigned || []).concat(data.assigned || []);
   all.forEach(function(i) {
-    knownIssues[i.key] = { status: i.status, assignee: i.assignee || null };
+    knownIssues[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
+}
+
+// ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
+function pedirPermissaoNotificacao() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function notificar(titulo, corpo, tag) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  var n = new Notification(titulo, {
+    body: corpo,
+    tag:  tag,        // agrupa notificações do mesmo tipo (substitui a anterior)
+    renotify: true,
+    icon: '/favicon.ico'
+  });
+  n.onclick = function() { window.focus(); n.close(); };
 }
 
 // ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
@@ -760,18 +780,53 @@ function detectarNovidades(data) {
     return Object.assign({}, i, { prevStatus: knownIssues[i.key].status });
   });
 
+  // Movimentação sem mudança de status (updated mudou, status igual) — qualquer chamado
+  var all = unassigned.concat(assigned);
+  var movimentados = all.filter(function(i) {
+    var prev = knownIssues[i.key];
+    return prev && prev.status === i.status && prev.updated !== i.updated;
+  });
+
   if (novosUnassigned.length > 0) {
-    var label = novosUnassigned.length === 1
+    var tituloU = novosUnassigned.length === 1
+      ? '⚠️ Novo chamado sem responsável: ' + novosUnassigned[0].key
+      : '⚠️ ' + novosUnassigned.length + ' novos chamados sem responsável';
+    var corpoU = novosUnassigned.length === 1
+      ? novosUnassigned[0].summary
+      : novosUnassigned.map(function(i) { return '• ' + i.key + ' — ' + i.summary.slice(0, 55); }).join('\n');
+    notificar(tituloU, corpoU, 'unassigned');
+    var labelU = novosUnassigned.length === 1
       ? '1 novo chamado sem responsável: <strong>' + escHtml(novosUnassigned[0].key) + '</strong> — ' + escHtml(novosUnassigned[0].summary.slice(0, 60))
       : novosUnassigned.length + ' novos chamados sem responsável detectados';
-    exibirBanner('🔔 ' + label, 'warning');
+    exibirBanner('🔔 ' + labelU, 'warning');
   }
 
   if (statusAlterado.length > 0) {
-    var label2 = statusAlterado.length === 1
+    var tituloS = statusAlterado.length === 1
+      ? '🔄 Status alterado: ' + statusAlterado[0].key
+      : '🔄 ' + statusAlterado.length + ' chamados com status alterado';
+    var corpoS = statusAlterado.length === 1
+      ? statusAlterado[0].summary + '\n' + statusAlterado[0].prevStatus + ' → ' + statusAlterado[0].status
+      : statusAlterado.map(function(i) { return '• ' + i.key + ': ' + i.prevStatus + ' → ' + i.status; }).join('\n');
+    notificar(tituloS, corpoS, 'status');
+    var labelS = statusAlterado.length === 1
       ? 'Status alterado em <strong>' + escHtml(statusAlterado[0].key) + '</strong>: ' + escHtml(statusAlterado[0].prevStatus) + ' → ' + escHtml(statusAlterado[0].status)
       : statusAlterado.length + ' chamados com status alterado';
-    exibirBanner('🔄 ' + label2, 'info');
+    exibirBanner('🔄 ' + labelS, 'info');
+  }
+
+  if (movimentados.length > 0) {
+    var tituloM = movimentados.length === 1
+      ? '📋 Movimentação: ' + movimentados[0].key
+      : '📋 ' + movimentados.length + ' chamados com movimentação recente';
+    var corpoM = movimentados.length === 1
+      ? movimentados[0].summary
+      : movimentados.map(function(i) { return '• ' + i.key + ' — ' + i.summary.slice(0, 55); }).join('\n');
+    notificar(tituloM, corpoM, 'movimentacao');
+    var labelM = movimentados.length === 1
+      ? 'Movimentação em <strong>' + escHtml(movimentados[0].key) + '</strong> — ' + escHtml(movimentados[0].summary.slice(0, 60))
+      : movimentados.length + ' chamados com movimentação recente';
+    exibirBanner('📋 ' + labelM, 'info');
   }
 }
 
