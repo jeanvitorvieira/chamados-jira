@@ -51,7 +51,7 @@
   .filter-card { background: var(--white); border-radius: var(--radius); border: 1.5px solid var(--gray-border); box-shadow: var(--shadow-sm); padding: 20px 24px; margin-bottom: 24px; }
   .filter-card h2 { font-size: 15px; font-weight: 700; color: var(--blue-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .filter-card h2::before { content: ''; display: inline-block; width: 4px; height: 18px; border-radius: 2px; background: var(--orange); }
-  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: end; }
+  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
   @media (max-width: 700px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
   .form-group { display: flex; flex-direction: column; gap: 5px; }
   .form-group label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
@@ -64,6 +64,9 @@
   .autocomplete-item:last-child { border-bottom: none; }
   .autocomplete-item:hover, .autocomplete-item.selected { background: var(--blue-light); }
   .autocomplete-item span { font-size: 11px; color: var(--text-secondary); }
+  .btn-buscar { background: var(--blue-primary); color: var(--white); border: none; border-radius: var(--radius-sm); padding: 10px 20px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s; white-space: nowrap; height: 40px; }
+  .btn-buscar:hover { background: var(--blue-dark); }
+  .btn-buscar:disabled { opacity: .5; cursor: not-allowed; }
   .summary-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
   .chip { background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 8px; }
   .chip-num { font-size: 20px; font-weight: 800; color: var(--blue-primary); }
@@ -84,6 +87,13 @@
   tbody tr:hover td { background: #F8FAFF; }
   .key-link { color: var(--blue-mid); text-decoration: none; font-weight: 700; font-size: 12px; }
   .key-link:hover { text-decoration: underline; }
+  /* Ordenação de colunas */
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { background: #eaecf2; }
+  thead th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
+  thead th.sort-desc::after { content: ' ▼'; font-size: 9px; }
+  /* Aviso de resultado incompleto */
+  .incomplete-banner { background: var(--blue-light); border: 1.5px solid var(--blue-mid); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 12px; font-size: 12px; color: var(--blue-primary); font-weight: 600; }
   .pri-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
   .pri-1 { background: var(--red-light); color: var(--red); }
   .pri-2 { background: var(--yellow-light); color: #7B5800; }
@@ -96,6 +106,28 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .placeholder-msg { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 14px; }
   .placeholder-msg .big { font-size: 40px; margin-bottom: 10px; }
+  .inp-warn { border-color: var(--orange) !important; }
+  .inp-warn::placeholder { color: var(--orange-dark); }
+  .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
+  .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
+  /* Segunda linha de filtros */
+  .filters-grid-2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
+  /* Multi-select de tipos */
+  .multiselect-wrap { position: relative; }
+  .multiselect-btn { width: 100%; border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: border-color .15s; }
+  .multiselect-btn:hover, .multiselect-btn.open { border-color: var(--blue-mid); }
+  .multiselect-btn .arrow { font-size: 10px; color: var(--text-secondary); transition: transform .15s; }
+  .multiselect-btn.open .arrow { transform: rotate(180deg); }
+  .multiselect-badge { background: var(--blue-primary); color: #fff; border-radius: 99px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .multiselect-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 50; display: none; }
+  .multiselect-dropdown.open { display: block; }
+  .multiselect-actions { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--gray-bg); }
+  .multiselect-actions button { font-size: 11px; color: var(--blue-mid); background: none; border: none; cursor: pointer; padding: 0; font-weight: 600; }
+  .multiselect-actions button:hover { text-decoration: underline; }
+  .multiselect-items { max-height: 220px; overflow-y: auto; padding: 4px 0; }
+  .multiselect-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
+  .multiselect-item:hover { background: var(--gray-bg); }
+  .multiselect-item input[type=checkbox] { accent-color: var(--blue-primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -113,7 +145,7 @@
       <span class="dot"></span>
       <span id="notif-label">Ativar alertas</span>
     </button>
-    <span class="status-badge">Online</span>
+    <span class="status-badge" id="status-badge">Online</span>
   </div>
 </header>
 <div id="toast"></div>
@@ -128,7 +160,8 @@
           <option value="">Todos os portfólios</option>
           <option value="Portfólio Pequenas Contas">Pequenas Contas</option>
           <option value="Portfólio Médias Contas">Médias Contas</option>
-          <option value="Portfólio Grandes Contas">Grandes Contas</option>
+          <option value="Portfólio SC/MG">SC/MG</option>
+          <option value="Portfólio SC/SP">SC/SP</option>
         </select>
       </div>
       <div class="form-group">
@@ -136,16 +169,12 @@
         <select id="sel-vertical">
           <option value="">Todas as verticais</option>
           <option value="Arrecadação">Arrecadação</option>
-          <option value="Beth">Beth</option>
+          <option value="Atendimento">Atendimento</option>
+          <option value="Contratos">Compras/Contratos</option>
           <option value="Contábil">Contábil</option>
-          <option value="Contratos">Contratos</option>
           <option value="Educação">Educação</option>
-          <option value="Governo Digital">Governo Digital</option>
-          <option value="ISS">ISS</option>
           <option value="Pessoal">Pessoal</option>
           <option value="Saúde">Saúde</option>
-          <option value="Studio">Studio</option>
-          <option value="Suite">Suite</option>
         </select>
       </div>
       <div class="form-group">
@@ -154,8 +183,44 @@
           <input type="text" id="inp-user" placeholder="Digite o nome ou e-mail..." autocomplete="off">
           <input type="hidden" id="inp-user-val">
           <div class="autocomplete-list" id="autocomplete-list"></div>
+          <span class="inp-hint">Selecione um usuário da lista</span>
         </div>
       </div>
+      <button class="btn-buscar" id="btn-buscar" onclick="buscar()">🔍 Buscar</button>
+    </div>
+
+    <div class="filters-grid-2">
+      <div class="form-group">
+        <label title="Filtra chamados com qualquer movimentação no período selecionado">Atualizado nos últimos ↕</label>
+        <select id="sel-days">
+          <option value="0">Qualquer data</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo de chamado</label>
+        <div class="multiselect-wrap" id="tipo-wrap">
+          <button type="button" class="multiselect-btn" id="tipo-btn" onclick="toggleTipoDropdown()">
+            <span id="tipo-label">Todos os tipos</span>
+            <span class="arrow">▼</span>
+          </button>
+          <div class="multiselect-dropdown" id="tipo-dropdown">
+            <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
+              <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off"
+                style="width:100%;border:1.5px solid var(--gray-border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;outline:none;"
+                oninput="filtrarTipos(this.value)">
+            </div>
+            <div class="multiselect-actions">
+              <button onclick="selecionarTodosTipos()">Selecionar todos</button>
+              <button onclick="limparTipos()">Limpar</button>
+            </div>
+            <div class="multiselect-items" id="tipo-items"></div>
+          </div>
+        </div>
+      </div>
+      <div></div>
     </div>
   </div>
 
@@ -168,48 +233,80 @@
   <div id="results">
     <div class="placeholder-msg">
       <div class="big">🔍</div>
-      Selecione um filtro para ver os chamados.
+      Selecione os filtros e clique em <strong>Buscar</strong> para ver os chamados.
     </div>
   </div>
 </main>
 
 <script>
-var acTimeout    = null;
+var acTimeout = null;
 var selectedUser = null;
-var notifAtivo   = false;
-var buscaAtiva   = false;        // true após a primeira busca bem-sucedida
-var pollTimer    = null;         // setInterval do polling em tela
-var POLL_MS      = 30 * 1000;   // 30 segundos
+var notifAtivo = false;
+var knownKeys = [];
+try { knownKeys = JSON.parse(localStorage.getItem('notif_knownKeys') || '[]'); } catch(e) {}
 
-// knownIssues = { [key]: { status, assignee } } — baseline para diff de notificações
-var knownIssues = {};
-
-var inpUser    = document.getElementById('inp-user');
+var inpUser = document.getElementById('inp-user');
 var inpUserVal = document.getElementById('inp-user-val');
-var acList     = document.getElementById('autocomplete-list');
+var acList = document.getElementById('autocomplete-list');
+
+// ── SEGURANÇA: escape de HTML para prevenir XSS ───────────────────────────────
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── BADGE DE STATUS DINÂMICO ─────────────────────────────────────────────────
+function setBadge(online) {
+  var badge = document.getElementById('status-badge');
+  badge.textContent = online ? 'Online' : 'Offline';
+  badge.style.background = online ? '#00C851' : '#e53935';
+}
+// Health-check leve: usa /api/tipos (sem parâmetros, resposta cacheada 1h)
+// Evita bater no Jira a cada abertura de página com uma query real
+fetch('/api/tipos')
+  .then(function(r) { setBadge(r.ok); })
+  .catch(function() { setBadge(false); });
 
 // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
 inpUser.addEventListener('input', function() {
   clearTimeout(acTimeout);
   selectedUser = null;
   inpUserVal.value = '';
+  inpUser.classList.remove('inp-warn');
   var q = inpUser.value.trim();
   if (q.length < 2) { acList.classList.remove('open'); return; }
   acTimeout = setTimeout(function() { fetchUsuarios(q); }, 300);
 });
 
+// Fecha ao clicar fora — usando blur apenas quando o foco não vai para a lista
 inpUser.addEventListener('blur', function() {
-  setTimeout(function() { acList.classList.remove('open'); }, 200);
+  setTimeout(function() {
+    if (!acList.contains(document.activeElement)) {
+      acList.classList.remove('open');
+      // Avisa se o usuário digitou algo mas não selecionou da lista
+      if (inpUser.value.trim() && !inpUserVal.value) {
+        inpUser.classList.add('inp-warn');
+      }
+    }
+  }, 150);
+});
+
+inpUser.addEventListener('focus', function() {
+  inpUser.classList.remove('inp-warn');
 });
 
 inpUser.addEventListener('keydown', function(e) {
   var items = acList.querySelectorAll('.autocomplete-item');
-  var arr   = Array.prototype.slice.call(items);
-  var idx   = arr.findIndex(function(i) { return i.classList.contains('selected'); });
+  var arr = Array.prototype.slice.call(items);
+  var idx = arr.findIndex(function(i) { return i.classList.contains('selected'); });
   if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(items, idx + 1); }
   if (e.key === 'ArrowUp')   { e.preventDefault(); setAcFocus(items, idx - 1); }
   if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].click(); }
-  if (e.key === 'Escape') acList.classList.remove('open');
+  if (e.key === 'Escape') { acList.classList.remove('open'); inpUser.blur(); }
 });
 
 function setAcFocus(items, idx) {
@@ -218,6 +315,9 @@ function setAcFocus(items, idx) {
 }
 
 function fetchUsuarios(q) {
+  inpUser.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\' stroke=\'%23003F8A\' stroke-width=\'3\' fill=\'none\' stroke-dasharray=\'31.4\' stroke-dashoffset=\'10\'%3E%3CanimateTransform attributeName=\'transform\' type=\'rotate\' from=\'0 12 12\' to=\'360 12 12\' dur=\'0.7s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E")';
+  inpUser.style.backgroundRepeat = 'no-repeat';
+  inpUser.style.backgroundPosition = 'right 10px center';
   fetch('/api/usuarios?q=' + encodeURIComponent(q))
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -227,160 +327,246 @@ function fetchUsuarios(q) {
       users.forEach(function(u) {
         var item = document.createElement('div');
         item.className = 'autocomplete-item';
-        item.innerHTML = u.displayName + '<span>' + u.email + '</span>';
+        // mousedown antes do blur — previne que a lista feche antes do click
+        item.addEventListener('mousedown', function(e) { e.preventDefault(); });
         item.addEventListener('click', function() {
-          selectedUser    = u;
-          inpUser.value   = u.displayName;
+          selectedUser = u;
+          inpUser.value = u.displayName;
           inpUserVal.value = u.name;
+          inpUser.classList.remove('inp-warn');
           acList.classList.remove('open');
-          buscar(); // auto-search ao selecionar responsável
         });
+        // Usa textContent para evitar XSS com dados do Jira
+        var nameEl = document.createElement('span');
+        nameEl.textContent = u.displayName;
+        var emailEl = document.createElement('span');
+        emailEl.style.fontSize = '11px';
+        emailEl.style.color = 'var(--text-secondary)';
+        emailEl.textContent = u.email;
+        item.appendChild(nameEl);
+        item.appendChild(emailEl);
         acList.appendChild(item);
       });
       acList.classList.add('open');
     })
+    .finally(function() {
+      inpUser.style.backgroundImage = '';
+    })
     .catch(function() { acList.classList.remove('open'); });
 }
 
-// ── AUTO-SEARCH NOS SELECTS ───────────────────────────────────────────────────
-document.getElementById('sel-vertical').addEventListener('change', function() { buscar(); });
-document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
+// ── MULTI-SELECT TIPOS ───────────────────────────────────────────────────────
+var tiposSelected = new Set(); // Set de IDs numéricos selecionados
+var tiposNomeMap  = {};        // { "1,10015": "Incidente", ... } para exibição
+
+function initTipos(tipos) {
+  var container = document.getElementById('tipo-items');
+  container.innerHTML = '';
+  tiposNomeMap = {};
+  tipos.forEach(function(tipo) {
+    // tipo = { name: "Incidente", ids: ["1", "10015"] }
+    var name = typeof tipo === 'string' ? tipo : tipo.name;
+    var ids  = typeof tipo === 'string' ? [tipo] : (tipo.ids || [String(tipo.name)]);
+    var key  = ids.join(',');
+    tiposNomeMap[key] = name;
+
+    var label = document.createElement('label');
+    label.className = 'multiselect-item';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = key;
+    cb.addEventListener('change', function() {
+      if (cb.checked) tiposSelected.add(key);
+      else tiposSelected.delete(key);
+      atualizarTipoLabel();
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(name));
+    container.appendChild(label);
+  });
+}
+
+// Carrega tipos do Jira ao inicializar
+fetch('/api/tipos')
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok && data.tipos) initTipos(data.tipos);
+  })
+  .catch(function() { /* falha silenciosa — dropdown fica vazio */ });
+
+function toggleTipoDropdown() {
+  var btn = document.getElementById('tipo-btn');
+  var dd  = document.getElementById('tipo-dropdown');
+  var isOpening = !dd.classList.contains('open');
+  btn.classList.toggle('open');
+  dd.classList.toggle('open');
+  if (isOpening) {
+    // Limpa a pesquisa ao abrir e foca no campo
+    var search = document.getElementById('tipo-search');
+    search.value = '';
+    filtrarTipos('');
+    setTimeout(function() { search.focus(); }, 50);
+  }
+}
+
+function filtrarTipos(q) {
+  var termo = q.toLowerCase();
+  document.querySelectorAll('#tipo-items .multiselect-item').forEach(function(item) {
+    var nome = item.textContent.trim().toLowerCase();
+    item.style.display = nome.includes(termo) ? '' : 'none';
+  });
+}
+
+function selecionarTodosTipos() {
+  tiposSelected.clear();
+  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+  atualizarTipoLabel();
+}
+
+function limparTipos() { selecionarTodosTipos(); }
+
+function atualizarTipoLabel() {
+  var label = document.getElementById('tipo-label');
+  var btn   = document.getElementById('tipo-btn');
+  if (tiposSelected.size === 0) {
+    label.innerHTML = 'Todos os tipos';
+    var badge = btn.querySelector('.multiselect-badge');
+    if (badge) badge.remove();
+  } else {
+    var nomes = [...tiposSelected].map(function(k) { return tiposNomeMap[k] || k; });
+    label.textContent = tiposSelected.size === 1
+      ? nomes[0]
+      : tiposSelected.size + ' tipos';
+    var existing = btn.querySelector('.multiselect-badge');
+    if (!existing) {
+      var b = document.createElement('span');
+      b.className = 'multiselect-badge';
+      btn.querySelector('.arrow').before(b);
+    }
+    btn.querySelector('.multiselect-badge').textContent = tiposSelected.size;
+  }
+}
+
+// Fecha dropdown ao clicar fora
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('tipo-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('tipo-btn').classList.remove('open');
+    document.getElementById('tipo-dropdown').classList.remove('open');
+  }
+});
 
 // ── BUSCA ────────────────────────────────────────────────────────────────────
-function buscar(silencioso) {
+function buscar() {
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
   var user      = inpUserVal.value;
 
-  // Sem filtro selecionado, não dispara
-  if (!vertical && !portfolio && !user) return;
+  // Bloqueia se o usuário digitou no campo responsável mas não selecionou da lista
+  if (inpUser.value.trim() && !user) {
+    inpUser.classList.add('inp-warn');
+    document.getElementById('results').innerHTML =
+      '<div class="state"><div class="state-icon">⚠️</div>' +
+      'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
+      '</div>';
+    document.getElementById('chips').style.display = 'none';
+    return;
+  }
+
+  // Exige pelo menos 2 filtros preenchidos
+  var preenchidos = [vertical, portfolio, user].filter(Boolean).length;
+  if (preenchidos < 2) {
+    document.getElementById('results').innerHTML =
+      '<div class="state"><div class="state-icon">⚠️</div>' +
+      'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
+      '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
+    document.getElementById('chips').style.display = 'none';
+    return;
+  }
 
   var params = new URLSearchParams();
   if (vertical)  params.set('vertical',  vertical);
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
-
-  if (!silencioso) {
-    document.getElementById('results').innerHTML =
-      '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
-    document.getElementById('chips').style.display = 'none';
+  if (tiposSelected.size > 0) {
+    // Envia todos os IDs de todos os tipos selecionados (ex: "1,10015,3")
+    var allIds = [...tiposSelected].join(',');
+    params.set('typeIds', allIds);
   }
+  var days = document.getElementById('sel-days').value;
+  if (days && days !== '0') params.set('days', days);
+
+  var btn = document.getElementById('btn-buscar');
+  btn.disabled = true;
+  btn.textContent = 'Buscando...';
+  document.getElementById('chips').style.display = 'none';
+  document.getElementById('results').innerHTML =
+    '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
 
   fetch('/api/chamados?' + params.toString())
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
-
-      var issues     = data.issues || [];
-      var unassigned = issues.filter(function(i) { return !i.assignee; });
-      var assigned   = issues.filter(function(i) { return  !!i.assignee; });
-
-      // ── Detecção de novidades (só após baseline estar montado) ────────────
-      if (buscaAtiva && Object.keys(knownIssues).length > 0) {
-        detectarNovidades(unassigned, assigned);
-      }
-
-      // Atualiza baseline
-      knownIssues = {};
-      issues.forEach(function(i) {
-        knownIssues[i.key] = { status: i.status, assignee: i.assignee };
-      });
-
-      renderResults(data, user, unassigned, assigned);
-
-      // Inicia polling em tela após a primeira busca
-      if (!buscaAtiva) {
-        buscaAtiva = true;
-        iniciarPolling();
-      }
-      // Sincroniza SW se notificações estiverem ativas
-      if (notifAtivo) pushConfigToSW();
+      renderResults(data, user);
+      syncKnownKeysFromData(data);
     })
     .catch(function(err) {
-      if (!silencioso) {
-        document.getElementById('results').innerHTML =
-          '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + err.message + '</div>';
-      }
+      document.getElementById('results').innerHTML =
+        '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = '🔍 Buscar';
     });
 }
 
-// ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
-function iniciarPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(function() { buscar(true); }, POLL_MS);
-}
-
-function pararPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-}
-
-// ── DETECÇÃO DE NOVIDADES ────────────────────────────────────────────────────
-function detectarNovidades(unassigned, assigned) {
-  // 1. Novos chamados sem responsável (não estavam no baseline)
-  var novosUnassigned = unassigned.filter(function(i) { return !knownIssues[i.key]; });
-
-  // 2. Mudança de status em chamados atribuídos
-  var statusAlterado = assigned.filter(function(i) {
-    var prev = knownIssues[i.key];
-    return prev && prev.status !== i.status;
-  }).map(function(i) {
-    return Object.assign({}, i, { prevStatus: knownIssues[i.key].status });
-  });
-
-  if (novosUnassigned.length > 0) {
-    var label = novosUnassigned.length === 1
-      ? '1 novo chamado sem responsável: <strong>' + novosUnassigned[0].key + '</strong> — ' + novosUnassigned[0].summary.slice(0, 60)
-      : novosUnassigned.length + ' novos chamados sem responsável detectados';
-    exibirBanner('🔔 ' + label, 'warning');
-  }
-
-  if (statusAlterado.length > 0) {
-    var label2 = statusAlterado.length === 1
-      ? 'Status alterado em <strong>' + statusAlterado[0].key + '</strong>: ' + statusAlterado[0].prevStatus + ' → ' + statusAlterado[0].status
-      : statusAlterado.length + ' chamados com status alterado';
-    exibirBanner('🔄 ' + label2, 'info');
-  }
-}
-
-function exibirBanner(html, tipo) {
-  var cor     = tipo === 'warning' ? 'var(--orange)' : 'var(--blue-mid)';
-  var corBg   = tipo === 'warning' ? 'var(--orange-light)' : 'var(--blue-light)';
-  var corBord = tipo === 'warning' ? 'var(--orange)' : 'var(--blue-mid)';
-  var corTxt  = tipo === 'warning' ? 'var(--orange-dark)' : 'var(--blue-primary)';
-
-  document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
-  var banner = document.createElement('div');
-  banner.className = 'new-issues-banner';
-  banner.style.cssText = 'background:' + corBg + ';border-color:' + corBord + ';color:' + corTxt;
-  banner.innerHTML = html +
-    ' <button onclick="buscar()" style="margin-left:auto;background:' + cor + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
-  document.getElementById('results').insertAdjacentElement('beforebegin', banner);
-}
+document.querySelectorAll('select').forEach(function(el) {
+  el.addEventListener('keydown', function(e) { if (e.key === 'Enter') buscar(); });
+});
+// Enter no campo responsável (quando lista fechada)
+inpUser.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
+});
 
 // ── RENDERIZAÇÃO ─────────────────────────────────────────────────────────────
 var STATUS_BG = {
-  'Aguardando Manutencao': '#FFF8E1', 'Aguardando Manutenção': '#FFF8E1',
-  'Aguardando aprovacao do solicitante': '#E3F2FD', 'Aguardando aprovação do solicitante': '#E3F2FD',
+  'Aguardando Manutencao': '#FFF8E1',
+  'Aguardando Manutenção': '#FFF8E1',
+  'Aguardando aprovacao do solicitante': '#E3F2FD',
+  'Aguardando aprovação do solicitante': '#E3F2FD',
   'Em andamento': '#E8F5E9',
-  'Nao iniciada': '#F3F4F6', 'Não iniciada': '#F3F4F6',
-  'Aberto': '#EDE9FE', 'Reaberto': '#FFEBEE'
+  'Nao iniciada': '#F3F4F6',
+  'Não iniciada': '#F3F4F6',
+  'Aberto': '#EDE9FE',
+  'Reaberto': '#FFEBEE'
 };
 var STATUS_COLOR = {
-  'Aguardando Manutencao': '#7B5800', 'Aguardando Manutenção': '#7B5800',
-  'Aguardando aprovacao do solicitante': '#1565C0', 'Aguardando aprovação do solicitante': '#1565C0',
+  'Aguardando Manutencao': '#7B5800',
+  'Aguardando Manutenção': '#7B5800',
+  'Aguardando aprovacao do solicitante': '#1565C0',
+  'Aguardando aprovação do solicitante': '#1565C0',
   'Em andamento': '#2E7D32',
-  'Nao iniciada': '#5A6680', 'Não iniciada': '#5A6680',
-  'Aberto': '#4527A0', 'Reaberto': '#C62828'
+  'Nao iniciada': '#5A6680',
+  'Não iniciada': '#5A6680',
+  'Aberto': '#4527A0',
+  'Reaberto': '#C62828'
 };
 
 function statusPill(s) {
-  return '<span class="status-pill" style="background:' + (STATUS_BG[s]||'#F3F4F6') + ';color:' + (STATUS_COLOR[s]||'#5A6680') + '">' + s + '</span>';
+  return '<span class="status-pill" style="background:' + (STATUS_BG[s] || '#F3F4F6') + ';color:' + (STATUS_COLOR[s] || '#5A6680') + '">' + s + '</span>';
 }
 
 function priBadge(p) {
   var map = {'Highest':'1','High':'2','Medium':'3','Low':'4','Lowest':'4','1':'1','2':'2','3':'3','4':'4','5':'4'};
-  var n = map[p] || '3';
+  var n = map[String(p)];
+  if (!n) return '<span style="color:var(--text-secondary);font-size:11px">—</span>';
   return '<span class="pri-badge pri-' + n + '">P' + n + '</span>';
+}
+
+// Abrevia o nome do portfólio para exibição na tabela
+function abrevPortfolio(p) {
+  if (!p) return '—';
+  return escHtml(p.replace('Portfólio ', ''));
 }
 
 function fmtDate(iso) {
@@ -390,90 +576,151 @@ function fmtDate(iso) {
          d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
-function renderTable(issues) {
+// Estado de ordenação atual
+var sortState = { col: null, dir: 'asc' };
+
+var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'status', 'priority', 'type', 'updated'];
+
+function sortIssues(issues, col, dir) {
+  return issues.slice().sort(function(a, b) {
+    var va = a[col] || '';
+    var vb = b[col] || '';
+    // Prioridade: comparação numérica
+    if (col === 'priority') { va = parseInt(va) || 99; vb = parseInt(vb) || 99; }
+    var cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function renderTable(issues, tableId) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
-  var rows = issues.map(function(i) {
+
+  var sorted = sortState.col ? sortIssues(issues, sortState.col, sortState.dir) : issues;
+
+  var headers = ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Atualizado'];
+  var ths = headers.map(function(h, idx) {
+    var col = SORT_KEYS[idx];
+    var cls = 'sortable' + (sortState.col === col ? (' sort-' + sortState.dir) : '');
+    return '<th class="' + cls + '" onclick="onSort(\'' + tableId + '\',\'' + col + '\')">' + h + '</th>';
+  }).join('');
+
+  var rows = sorted.map(function(i) {
+    var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
     return '<tr>' +
-      '<td><a class="key-link" href="' + i.url + '" target="_blank">' + i.key + '</a></td>' +
-      '<td style="max-width:340px">' + i.summary + '</td>' +
+      '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
+      '<td style="max-width:300px">' + escHtml(i.summary) + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
-      '<td style="font-size:12px;color:var(--text-secondary)">' + i.type + '</td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + fmtDate(i.updated) + '</td>' +
       '</tr>';
   }).join('');
-  return '<div class="table-wrap"><table>' +
-    '<thead><tr><th>Chamado</th><th>Resumo</th><th>Status</th><th>Prior.</th><th>Tipo</th><th>Atualizado</th></tr></thead>' +
+
+  return '<div class="table-wrap"><table id="' + tableId + '">' +
+    '<thead><tr>' + ths + '</tr></thead>' +
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
-function renderResults(data, userKey, unassigned, assigned) {
-  var userName = (selectedUser && selectedUser.displayName) || userKey || null;
+// Armazena issues por seção para re-renderizar ao ordenar
+var _lastData = null;
+var _lastUser = null;
 
-  document.getElementById('chip-total').textContent      = data.total || (data.issues||[]).length;
-  document.getElementById('chip-unassigned').textContent = unassigned.length;
-  document.getElementById('chip-mine').textContent       = assigned.length;
+function onSort(tableId, col) {
+  if (sortState.col === col) {
+    sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortState.col = col;
+    sortState.dir = 'asc';
+  }
+  if (_lastData) renderResults(_lastData, _lastUser);
+}
+
+function renderResults(data, userKey) {
+  // Salva para re-renderizar ao ordenar
+  _lastData = data;
+  _lastUser = userKey;
+
+  var unassigned = data.unassigned || [];
+  var assigned   = data.assigned   || [];
+  var userName   = (selectedUser && selectedUser.displayName) || userKey || null;
+
+  document.getElementById('chip-total').textContent      = data.total || (unassigned.length + assigned.length);
+  document.getElementById('chip-unassigned').textContent = data.totalUnassigned != null ? data.totalUnassigned : unassigned.length;
+  document.getElementById('chip-mine').textContent       = data.totalAssigned   != null ? data.totalAssigned   : assigned.length;
   document.getElementById('chips').style.display         = 'flex';
 
-  document.getElementById('results').innerHTML =
+  // Aviso quando alguma seção está truncada no limite de 100
+  var avisos = [];
+  if (data.totalUnassigned > unassigned.length)
+    avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
+  if (data.totalAssigned > assigned.length)
+    avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+  var incompleto = avisos.length
+    ? '<div class="incomplete-banner">⚠️ Resultados incompletos — ' + avisos.join(' · ') + '. Refine os filtros ou reduza o período.</div>'
+    : '';
+
+  document.getElementById('results').innerHTML = incompleto +
     '<div class="section">' +
       '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
-      renderTable(unassigned) +
+      renderTable(unassigned, 'tbl-unassigned') +
     '</div>' +
     '<div class="section">' +
-      '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + userName : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
-      renderTable(assigned) +
+      '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + escHtml(userName) : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
+      renderTable(assigned, 'tbl-assigned') +
     '</div>';
 }
 
-// ── NOTIFICAÇÕES (Service Worker) ─────────────────────────────────────────────
-function getConfigSW() {
+function syncKnownKeysFromData(data) {
+  var all = (data.unassigned || []).concat(data.assigned || []);
+  knownKeys = all.map(function(i) { return i.key; });
+  try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+  if (notifAtivo) pushConfigToSW();
+}
+
+// ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
+function getConfig() {
+  var days    = document.getElementById('sel-days').value;
+  var typeIds = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
   return {
-    vertical:     document.getElementById('sel-vertical').value,
-    portfolio:    document.getElementById('sel-portfolio').value,
-    user:         inpUserVal.value,
-    knownIssues:  knownIssues
+    vertical:  document.getElementById('sel-vertical').value,
+    portfolio: document.getElementById('sel-portfolio').value,
+    user:      inpUserVal.value,
+    days:      days !== '0' ? days : '',
+    typeIds:   typeIds,
+    knownKeys: knownKeys
   };
 }
 
 function pushConfigToSW() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.ready.then(function(reg) {
-    if (reg.active) reg.active.postMessage({ type: 'START_POLLING', payload: getConfigSW() });
+    if (reg.active) reg.active.postMessage({ type: 'START_POLLING', payload: getConfig() });
   });
 }
 
-// Mensagens vindas do SW (notificações push em background)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', function(e) {
     if (!e.data) return;
-    var type = e.data.type;
-
-    if (type === 'BASELINE_SET') {
-      knownIssues = e.data.knownIssues || {};
+    // Baseline definido na primeira execução — salva sem notificar
+    if (e.data.type === 'BASELINE_SET') {
+      knownKeys = e.data.allKeys;
+      try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(ex) {}
+      return;
     }
-
-    if (type === 'NEW_UNASSIGNED' && e.data.issues && e.data.issues.length > 0) {
-      knownIssues = e.data.knownIssues || knownIssues;
-      var novos = e.data.issues;
-      var label = novos.length === 1
-        ? '1 novo chamado sem responsável: <strong>' + novos[0].key + '</strong> — ' + novos[0].summary.slice(0, 60)
-        : novos.length + ' novos chamados sem responsável';
-      exibirBanner('🔔 ' + label, 'warning');
-    }
-
-    if (type === 'STATUS_CHANGED' && e.data.issues && e.data.issues.length > 0) {
-      knownIssues = e.data.knownIssues || knownIssues;
-      var changed = e.data.issues;
-      var label2 = changed.length === 1
-        ? 'Status alterado em <strong>' + changed[0].key + '</strong>: ' + changed[0].prevStatus + ' → ' + changed[0].status
-        : changed.length + ' chamados com status alterado';
-      exibirBanner('🔄 ' + label2, 'info');
-    }
-
-    if (type === 'POLL_DONE') {
-      knownIssues = e.data.knownIssues || knownIssues;
-    }
+    if (e.data.type !== 'NEW_ISSUES') return;
+    knownKeys = e.data.allKeys;
+    try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+    var novos = e.data.issues;
+    document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+    var label = novos.length === 1
+      ? '1 novo chamado: <strong>' + novos[0].key + '</strong> — ' + novos[0].summary.slice(0, 70)
+      : novos.length + ' novos chamados detectados';
+    var banner = document.createElement('div');
+    banner.className = 'new-issues-banner';
+    banner.innerHTML = '🔔 ' + label + ' <button onclick="buscar()" style="margin-left:auto;background:var(--orange);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Atualizar lista</button>';
+    document.getElementById('results').insertAdjacentElement('beforebegin', banner);
   });
 }
 
@@ -486,7 +733,7 @@ function toggleNotificacoes() {
     }
     notifAtivo = false;
     updateNotifBtn();
-    showToast('🔕 Alertas push desativados.');
+    showToast('🔕 Alertas desativados.');
     return;
   }
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
@@ -494,18 +741,18 @@ function toggleNotificacoes() {
   }
   Notification.requestPermission().then(function(perm) {
     if (perm !== 'granted') { showToast('❌ Permissão de notificação negada.'); return; }
-    var cfg = getConfigSW();
+    var cfg = getConfig();
     if (!cfg.vertical && !cfg.portfolio && !cfg.user) {
-      showToast('⚠️ Selecione um filtro antes de ativar os alertas.'); return;
+      showToast('⚠️ Defina pelo menos um filtro antes de ativar os alertas.'); return;
     }
-    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user})); } catch(e) {}
+    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user, days: cfg.days, types: cfg.types})); } catch(e) {}
     navigator.serviceWorker.register('/sw.js').then(function() {
       return navigator.serviceWorker.ready;
     }).then(function() {
       pushConfigToSW();
       notifAtivo = true;
       updateNotifBtn();
-      showToast('✅ Alertas push ativados!');
+      showToast('✅ Alertas ativados! Você será notificado a cada 5 min.');
     });
   });
 }
@@ -524,7 +771,7 @@ function showToast(msg) {
   toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
 }
 
-// Restaura alertas push ao recarregar
+// Restaura alertas ao recarregar
 try {
   var savedCfg = localStorage.getItem('notif_config');
   if (savedCfg && Notification.permission === 'granted') {
