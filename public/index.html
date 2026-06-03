@@ -719,18 +719,22 @@ function pedirPermissaoNotificacao() {
 }
 
 function enviarBoasVindas() {
-  // Dispara apenas uma vez por sessão
-  if (sessionStorage.getItem('notif_boas_vindas')) return;
-  sessionStorage.setItem('notif_boas_vindas', '1');
   var user = document.getElementById('inp-user').value.trim();
   var corpo = 'Você será notificado sobre:\n'
     + '• Novos chamados sem responsável\n'
     + (user ? '• Atualizações nos chamados de ' + user : '• Atualizações nos chamados atribuídos');
-  new Notification('✅ Alertas ativados — Chamados por Vertical', {
-    body: corpo,
-    tag:  'boas-vindas',
-    icon: '/favicon.ico'
-  });
+  console.log('[Notif] Disparando boas-vindas. permission=', Notification.permission);
+  try {
+    var n = new Notification('✅ Alertas ativados — Chamados por Vertical', {
+      body: corpo,
+      tag:  'boas-vindas',
+      icon: '/favicon.ico'
+    });
+    console.log('[Notif] Criada com sucesso:', n);
+    n.onclick = function() { window.focus(); n.close(); };
+  } catch(e) {
+    console.error('[Notif] Erro ao criar notificação:', e);
+  }
 }
 
 function notificar(titulo, corpo, tag) {
