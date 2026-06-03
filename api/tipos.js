@@ -29,9 +29,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const data  = await get('/rest/api/2/issuetype');
+    // Deduplica por nome — o Jira pode ter dois tipos com o mesmo nome em schemes diferentes
+    const seen = new Set();
     const tipos = data
       .filter(t => !t.subtask && !TIPOS_EXCLUIDOS.has(t.name))
       .map(t => t.name)
+      .filter(name => seen.has(name) ? false : seen.add(name))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
     // Cache de 1h — tipos mudam raramente
