@@ -1,25 +1,21 @@
-// Service Worker — polling de chamados em background
+// Service Worker — polling de notificações push em background
+// O polling de UI (atualização da tabela) é feito diretamente na página (30s).
+// Este SW cuida apenas de notificações push (5 min), úteis quando a aba está em background.
 const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 let pollTimer = null;
 
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
-// Recebe mensagens da página principal
 self.addEventListener('message', e => {
-  if (e.data?.type === 'START_POLLING') {
-    startPolling(e.data.payload);
-  }
-  if (e.data?.type === 'STOP_POLLING') {
-    stopPolling();
-  }
+  if (e.data?.type === 'START_POLLING') startPolling(e.data.payload);
+  if (e.data?.type === 'STOP_POLLING')  stopPolling();
 });
 
 function startPolling(config) {
   stopPolling();
-  // Guarda configuração no SW
   self._pollConfig = config;
-  poll(config); // primeira checagem imediata
+  poll(config);
   pollTimer = setInterval(() => poll(self._pollConfig), POLL_INTERVAL_MS);
 }
 
@@ -34,52 +30,73 @@ async function poll(config) {
     if (config.vertical)  params.set('vertical',  config.vertical);
     if (config.portfolio) params.set('portfolio', config.portfolio);
     if (config.user)      params.set('user',      config.user);
-    // Inclui typeIds e days para que as notificações reflitam os filtros ativos na UI
-    if (config.typeIds)   params.set('typeIds',   config.typeIds);
-    if (config.days)      params.set('days',      config.days);
 
     const r    = await fetch(`/api/chamados?${params}`);
     const data = await r.json();
-    if (!data.ok || !data.issues) return;
+    if (!data.ok) return;
 
-    const currentKeys = new Set(data.issues.map(i => i.key));
-    const knownKeys   = new Set(config.knownKeys || []);
-    const allKeys     = [...currentKeys];
+    // A API retorna data.issues (array flat) — separamos aqui
+    const issues     = data.issues || [];
+    const unassigned = issues.filter(i => !i.assignee);
+    const assigned   = issues.filter(i =>  !!i.assignee);
 
-    // Primeira execução sem baseline: apenas salva os IDs atuais sem notificar.
-    // Isso evita spam de "N novos chamados" ao ativar os alertas pela primeira vez.
-    if (knownKeys.size === 0) {
-      self._pollConfig = { ...config, knownKeys: allKeys };
-      notifyClients({ type: 'BASELINE_SET', allKeys });
+    // knownIssues = { [key]: { status, assignee } }
+    const known      = config.knownIssues || {};
+    const isFirstRun = Object.keys(known).length === 0;
+
+    // Snapshot atual
+    const current = {};
+    issues.forEach(i => { current[i.key] = { status: i.status, assignee: i.assignee || null }; });
+
+    // Na primeira execução, salva baseline e notifica a página
+    if (isFirstRun) {
+      self._pollConfig = { ...config, knownIssues: current };
+      notifyClients({ type: 'BASELINE_SET', knownIssues: current });
       return;
     }
 
-    // Novos chamados = aparecem agora mas não estavam na última checagem
-    const novos = data.issues.filter(i => !knownKeys.has(i.key));
+    // ── Novos chamados sem responsável ────────────────────────────────────────
+    const novosUnassigned = unassigned.filter(i => !known[i.key]);
 
-    // Sempre atualiza knownKeys — mesmo sem novidades, para detectar
-    // chamados que foram fechados e reabertos corretamente.
-    self._pollConfig = { ...config, knownKeys: allKeys };
+    // ── Mudanças de status em chamados atribuídos ─────────────────────────────
+    const statusChanged = assigned
+      .filter(i => known[i.key] && known[i.key].status !== i.status)
+      .map(i => ({ ...i, prevStatus: known[i.key].status }));
 
-    if (novos.length > 0) {
-      notifyClients({ type: 'NEW_ISSUES', issues: novos, allKeys });
+    // Atualiza baseline
+    self._pollConfig = { ...config, knownIssues: current };
 
-      const title = novos.length === 1
-        ? `📋 Novo chamado: ${novos[0].key}`
-        : `📋 ${novos.length} novos chamados`;
-      const body = novos.length === 1
-        ? novos[0].summary
-        : novos.map(i => `• ${i.key} — ${i.summary.slice(0, 60)}`).join('\n');
+    // ── Push notifications ────────────────────────────────────────────────────
+    if (novosUnassigned.length > 0) {
+      const title = novosUnassigned.length === 1
+        ? `⚠️ Novo chamado sem responsável: ${novosUnassigned[0].key}`
+        : `⚠️ ${novosUnassigned.length} novos chamados sem responsável`;
+      const body = novosUnassigned.length === 1
+        ? novosUnassigned[0].summary
+        : novosUnassigned.map(i => `• ${i.key} — ${i.summary.slice(0, 55)}`).join('\n');
 
       self.registration.showNotification(title, {
-        body,
-        icon: '/icon.png',
-        badge: '/icon.png',
-        tag: 'chamados-update',
-        renotify: false, // não re-exibe com som se a notificação já estiver visível
-        data: { url: '/' },
+        body, tag: 'novos-unassigned', renotify: true, data: { url: '/' },
       });
+      notifyClients({ type: 'NEW_UNASSIGNED', issues: novosUnassigned, knownIssues: current });
     }
+
+    if (statusChanged.length > 0) {
+      const title = statusChanged.length === 1
+        ? `🔄 Status alterado: ${statusChanged[0].key}`
+        : `🔄 ${statusChanged.length} chamados com status alterado`;
+      const body = statusChanged.length === 1
+        ? `${statusChanged[0].summary}\n${statusChanged[0].prevStatus} → ${statusChanged[0].status}`
+        : statusChanged.map(i => `• ${i.key}: ${i.prevStatus} → ${i.status}`).join('\n');
+
+      self.registration.showNotification(title, {
+        body, tag: 'status-changed', renotify: true, data: { url: '/' },
+      });
+      notifyClients({ type: 'STATUS_CHANGED', issues: statusChanged, knownIssues: current });
+    }
+
+    notifyClients({ type: 'POLL_DONE', knownIssues: current });
+
   } catch { /* falha silenciosa */ }
 }
 
@@ -88,7 +105,6 @@ async function notifyClients(msg) {
   clients.forEach(c => c.postMessage(msg));
 }
 
-// Clique na notificação abre/foca a aba
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   e.waitUntil(
