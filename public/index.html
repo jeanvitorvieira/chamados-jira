@@ -435,6 +435,7 @@ function selecionarTodosTipos() {
   tiposSelected.clear();
   document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
   atualizarTipoLabel();
+  if (buscaAtiva) buscar();
 }
 
 function limparTipos() { selecionarTodosTipos(); }
@@ -723,6 +724,7 @@ function pararPolling() {
 
 function agendarProximoRefresh() {
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  document.getElementById('refresh-bar').style.display = 'flex'; // garante visibilidade
   refreshCountdown = REFRESH_INTERVAL;
   atualizarBarraRefresh();
   autoRefreshTimer = setInterval(function() {
