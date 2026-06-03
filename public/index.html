@@ -453,6 +453,17 @@ function buscar() {
   var portfolio = document.getElementById('sel-portfolio').value;
   var user      = inpUserVal.value;
 
+  // Bloqueia se o usuário digitou no campo responsável mas não selecionou da lista
+  if (inpUser.value.trim() && !user) {
+    inpUser.classList.add('inp-warn');
+    document.getElementById('results').innerHTML =
+      '<div class="state"><div class="state-icon">⚠️</div>' +
+      'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
+      '</div>';
+    document.getElementById('chips').style.display = 'none';
+    return;
+  }
+
   // Exige pelo menos 2 filtros preenchidos
   var preenchidos = [vertical, portfolio, user].filter(Boolean).length;
   if (preenchidos < 2) {
@@ -484,7 +495,7 @@ function buscar() {
     .then(function(data) {
       if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
       renderResults(data, user);
-      syncKnownKeys();
+      syncKnownKeysFromData(data);
     })
     .catch(function(err) {
       document.getElementById('results').innerHTML =
@@ -618,19 +629,23 @@ function renderResults(data, userKey) {
   _lastData = data;
   _lastUser = userKey;
 
-  var issues     = data.issues || [];
-  var unassigned = issues.filter(function(i) { return !i.assignee; });
-  var assigned   = issues.filter(function(i) { return !!i.assignee; });
+  var unassigned = data.unassigned || [];
+  var assigned   = data.assigned   || [];
   var userName   = (selectedUser && selectedUser.displayName) || userKey || null;
 
-  document.getElementById('chip-total').textContent      = data.total || issues.length;
-  document.getElementById('chip-unassigned').textContent = unassigned.length;
-  document.getElementById('chip-mine').textContent       = assigned.length;
+  document.getElementById('chip-total').textContent      = data.total || (unassigned.length + assigned.length);
+  document.getElementById('chip-unassigned').textContent = data.totalUnassigned != null ? data.totalUnassigned : unassigned.length;
+  document.getElementById('chip-mine').textContent       = data.totalAssigned   != null ? data.totalAssigned   : assigned.length;
   document.getElementById('chips').style.display         = 'flex';
 
-  // Aviso de resultado incompleto (total > retornados)
-  var incompleto = data.total > issues.length
-    ? '<div class="incomplete-banner">⚠️ Exibindo ' + issues.length + ' de ' + data.total + ' chamados. Refine os filtros ou reduza o período para ver todos.</div>'
+  // Aviso quando alguma seção está truncada no limite de 100
+  var avisos = [];
+  if (data.totalUnassigned > unassigned.length)
+    avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
+  if (data.totalAssigned > assigned.length)
+    avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+  var incompleto = avisos.length
+    ? '<div class="incomplete-banner">⚠️ Resultados incompletos — ' + avisos.join(' · ') + '. Refine os filtros ou reduza o período.</div>'
     : '';
 
   document.getElementById('results').innerHTML = incompleto +
@@ -644,13 +659,11 @@ function renderResults(data, userKey) {
     '</div>';
 }
 
-function syncKnownKeys() {
-  setTimeout(function() {
-    var links = document.querySelectorAll('.key-link');
-    knownKeys = Array.prototype.map.call(links, function(l) { return l.textContent.trim(); });
-    try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
-    if (notifAtivo) pushConfigToSW();
-  }, 800);
+function syncKnownKeysFromData(data) {
+  var all = (data.unassigned || []).concat(data.assigned || []);
+  knownKeys = all.map(function(i) { return i.key; });
+  try { localStorage.setItem('notif_knownKeys', JSON.stringify(knownKeys)); } catch(e) {}
+  if (notifAtivo) pushConfigToSW();
 }
 
 // ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────

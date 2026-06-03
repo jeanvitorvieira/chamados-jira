@@ -54,14 +54,31 @@ module.exports = async function handler(req, res) {
   const selectedTypes = validateTypes(req.query.types);
   const days          = validateDays(req.query.days);
 
-  // 3. Constrói JQL
-  const jql = buildJql(params, selectedTypes, days);
+  // 3. Constrói JQLs separados — um para sem responsável, outro para o usuário.
+  // Isso garante que cada seção seja precisa e independente do limite de 100.
+  const jqlUnassigned = buildJql(params, selectedTypes, days, 'unassigned');
+  const jqlAssigned   = params.user
+    ? buildJql(params, selectedTypes, days, 'assigned')
+    : null;
 
-  // 4. Chama o Jira (uma página por vez — paginação feita no cliente)
-  const startAt = Math.min(10000, Math.max(0, parseInt(req.query.startAt, 10) || 0));
-  let data;
+  // 4. Executa as queries em paralelo
   try {
-    data = await searchIssues(jql, FIELDS, startAt);
+    const [dataUnassigned, dataAssigned] = await Promise.all([
+      searchIssues(jqlUnassigned, FIELDS),
+      jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
+    ]);
+
+    const unassigned = (dataUnassigned.issues ?? []).map(mapIssue);
+    const assigned   = (dataAssigned.issues   ?? []).map(mapIssue);
+
+    return res.status(200).json({
+      ok:              true,
+      totalUnassigned: dataUnassigned.total,
+      totalAssigned:   dataAssigned.total,
+      total:           dataUnassigned.total + dataAssigned.total,
+      unassigned,
+      assigned,
+    });
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error('[chamados] Configuração inválida:', err.message);
@@ -69,23 +86,13 @@ module.exports = async function handler(req, res) {
     }
     if (err instanceof JiraError) {
       console.error(`[chamados] Erro Jira ${err.status}:`, err.detail);
-      // 400 geralmente significa que um valor do filtro não existe no Jira
       if (err.status === 400) {
         return res.status(400).json({ ok: false, error: 'Filtro inválido — um dos valores selecionados não existe no Jira.', code: 'INVALID_FILTER' });
       }
       return res.status(502).json({ ok: false, error: 'Não foi possível conectar ao Jira. Tente novamente.', code: 'JIRA_ERROR' });
     }
-    throw err; // erro inesperado — deixa o Vercel logar
+    throw err;
   }
-
-  // 4. Mapeia para o formato de resposta da API
-  const issues = (data.issues ?? []).map(mapIssue);
-
-  return res.status(200).json({
-    ok:    true,
-    total: data.total,
-    issues,
-  });
 };
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -94,11 +101,13 @@ module.exports = async function handler(req, res) {
  * Constrói a expressão JQL a partir dos parâmetros validados.
  * Os valores já chegam escapados de validate.js.
  */
-function buildJql({ vertical, portfolio, user }, selectedTypes, days) {
+/**
+ * Constrói JQL para uma das duas queries independentes.
+ * @param {'unassigned'|'assigned'} mode
+ */
+function buildJql({ vertical, portfolio, user }, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
-  // Só adiciona filtro de tipo se o usuário selecionou algum
-  // Os valores já chegam escapados de validateTypes()
   if (selectedTypes && selectedTypes.length > 0) {
     clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
   }
@@ -107,9 +116,8 @@ function buildJql({ vertical, portfolio, user }, selectedTypes, days) {
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
-  if (user) {
-    // Traz chamados sem dono OU atribuídos ao usuário especificado
-    clauses.push(`(assignee = "${user}" OR assignee is EMPTY)`);
+  if (mode === 'assigned' && user) {
+    clauses.push(`assignee = "${user}"`);
   } else {
     clauses.push('assignee is EMPTY');
   }
