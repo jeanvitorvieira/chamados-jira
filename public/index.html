@@ -37,11 +37,6 @@
   .header-subtitle { font-size: 11px; opacity: .75; font-weight: 400; }
   .header-right { display: flex; align-items: center; gap: 10px; }
   .status-badge { background: #00C851; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 99px; letter-spacing: .04em; }
-  .btn-notif { background: rgba(255,255,255,.15); border: 1.5px solid rgba(255,255,255,.3); color: #fff; border-radius: var(--radius-sm); padding: 6px 13px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background .15s; }
-  .btn-notif:hover { background: rgba(255,255,255,.25); }
-  .btn-notif.active { background: var(--orange); border-color: var(--orange-dark); }
-  .btn-notif .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
-  .btn-notif.active .dot { background: #fff; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--blue-dark); color: #fff; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-md); opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; white-space: nowrap; }
   #toast.show { opacity: 1; }
@@ -144,10 +139,6 @@
     </div>
   </div>
   <div class="header-right">
-    <button class="btn-notif" id="btn-notif" onclick="toggleNotificacoes()">
-      <span class="dot"></span>
-      <span id="notif-label">Ativar alertas</span>
-    </button>
     <span class="status-badge" id="status-badge">Online</span>
   </div>
 </header>
@@ -249,13 +240,11 @@
 <script>
 var acTimeout        = null;
 var selectedUser     = null;
-var notifAtivo       = false;
 var buscaAtiva       = false; // true após a primeira busca bem-sucedida
 var autoRefreshTimer = null;  // setInterval do countdown de atualização
 var refreshCountdown = 0;
 var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
-var knownIssues = {};         // { [key]: { status, assignee } }
-try { knownIssues = JSON.parse(localStorage.getItem('notif_knownIssues') || '{}'); } catch(e) {}
+var knownIssues = {};         // { [key]: { status, assignee } } — baseline do ciclo atual
 
 var inpUser = document.getElementById('inp-user');
 var inpUserVal = document.getElementById('inp-user-val');
@@ -514,10 +503,13 @@ function buscar(silencioso) {
   if (days && days !== '0') params.set('days', days);
 
   if (!silencioso) {
+    // Busca manual: reseta baseline para o próximo ciclo automático começar do zero
+    knownIssues = {};
     document.getElementById('chips').style.display = 'none';
     document.getElementById('results').innerHTML =
       '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
-    pararPolling(); // para countdown enquanto busca manualmente
+    pararPolling();
+    document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
   }
 
   fetch('/api/chamados?' + params.toString())
@@ -527,11 +519,11 @@ function buscar(silencioso) {
 
       renderResults(data, user);
 
-      // Remove banner anterior (dados já atualizados na tela)
-      document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
-
-      // Detecta novidades vs baseline e exibe novo banner se houver
-      if (buscaAtiva) detectarNovidades(data);
+      if (silencioso) {
+        // Só no refresh automático: compara com baseline e exibe banner se houver novidades
+        document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+        detectarNovidades(data);
+      }
 
       atualizarKnownIssues(data);
 
@@ -706,12 +698,11 @@ function renderResults(data, userKey) {
 }
 
 function atualizarKnownIssues(data) {
+  knownIssues = {};
   var all = (data.unassigned || []).concat(data.assigned || []);
   all.forEach(function(i) {
     knownIssues[i.key] = { status: i.status, assignee: i.assignee || null };
   });
-  try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(e) {}
-  if (notifAtivo) pushConfigToSW();
 }
 
 // ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
@@ -799,100 +790,6 @@ function exibirBanner(html, tipo) {
   document.getElementById('results').insertAdjacentElement('beforebegin', banner);
 }
 
-// ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
-function getConfig() {
-  var days    = document.getElementById('sel-days').value;
-  var typeIds = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
-  return {
-    vertical:    document.getElementById('sel-vertical').value,
-    portfolio:   document.getElementById('sel-portfolio').value,
-    user:        inpUserVal.value,
-    days:        days !== '0' ? days : '',
-    typeIds:     typeIds,
-    knownIssues: knownIssues
-  };
-}
-
-function pushConfigToSW() {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.ready.then(function(reg) {
-    if (reg.active) reg.active.postMessage({ type: 'START_POLLING', payload: getConfig() });
-  });
-}
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('message', function(e) {
-    if (!e.data) return;
-
-    if (e.data.type === 'BASELINE_SET') {
-      knownIssues = e.data.knownIssues || {};
-      try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(ex) {}
-      return;
-    }
-
-    if (e.data.type === 'NEW_UNASSIGNED' && e.data.issues && e.data.issues.length > 0) {
-      knownIssues = e.data.knownIssues || knownIssues;
-      var novos = e.data.issues;
-      var label = novos.length === 1
-        ? '1 novo chamado sem responsável: <strong>' + escHtml(novos[0].key) + '</strong> — ' + escHtml(novos[0].summary.slice(0, 60))
-        : novos.length + ' novos chamados sem responsável';
-      exibirBanner('🔔 ' + label, 'warning');
-    }
-
-    if (e.data.type === 'STATUS_CHANGED' && e.data.issues && e.data.issues.length > 0) {
-      knownIssues = e.data.knownIssues || knownIssues;
-      var changed = e.data.issues;
-      var label2 = changed.length === 1
-        ? 'Status alterado em <strong>' + escHtml(changed[0].key) + '</strong>: ' + escHtml(changed[0].prevStatus) + ' → ' + escHtml(changed[0].status)
-        : changed.length + ' chamados com status alterado';
-      exibirBanner('🔄 ' + label2, 'info');
-    }
-
-    if (e.data.type === 'POLL_DONE') {
-      knownIssues = e.data.knownIssues || knownIssues;
-      try { localStorage.setItem('notif_knownIssues', JSON.stringify(knownIssues)); } catch(ex) {}
-    }
-  });
-}
-
-function toggleNotificacoes() {
-  if (notifAtivo) {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(function(reg) {
-        if (reg.active) reg.active.postMessage({ type: 'STOP_POLLING' });
-      });
-    }
-    notifAtivo = false;
-    updateNotifBtn();
-    showToast('🔕 Alertas desativados.');
-    return;
-  }
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-    showToast('⚠️ Seu navegador não suporta notificações.'); return;
-  }
-  Notification.requestPermission().then(function(perm) {
-    if (perm !== 'granted') { showToast('❌ Permissão de notificação negada.'); return; }
-    var cfg = getConfig();
-    if (!cfg.vertical && !cfg.portfolio && !cfg.user) {
-      showToast('⚠️ Defina pelo menos um filtro antes de ativar os alertas.'); return;
-    }
-    try { localStorage.setItem('notif_config', JSON.stringify({vertical: cfg.vertical, portfolio: cfg.portfolio, user: cfg.user, days: cfg.days, types: cfg.types})); } catch(e) {}
-    navigator.serviceWorker.register('/sw.js').then(function() {
-      return navigator.serviceWorker.ready;
-    }).then(function() {
-      pushConfigToSW();
-      notifAtivo = true;
-      updateNotifBtn();
-      showToast('✅ Alertas ativados! Você será notificado a cada 5 min.');
-    });
-  });
-}
-
-function updateNotifBtn() {
-  document.getElementById('btn-notif').classList.toggle('active', notifAtivo);
-  document.getElementById('notif-label').textContent = notifAtivo ? 'Alertas ativos' : 'Ativar alertas';
-}
-
 var toastTimer;
 function showToast(msg) {
   var t = document.getElementById('toast');
@@ -901,20 +798,6 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
 }
-
-// Restaura alertas ao recarregar
-try {
-  var savedCfg = localStorage.getItem('notif_config');
-  if (savedCfg && Notification.permission === 'granted') {
-    navigator.serviceWorker.register('/sw.js').then(function() {
-      return navigator.serviceWorker.ready;
-    }).then(function() {
-      pushConfigToSW();
-      notifAtivo = true;
-      updateNotifBtn();
-    });
-  }
-} catch(e) {}
 </script>
 </body>
 </html>
