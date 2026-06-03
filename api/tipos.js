@@ -29,13 +29,19 @@ module.exports = async function handler(req, res) {
 
   try {
     const data  = await get('/rest/api/2/issuetype');
-    // Deduplica por nome — o Jira pode ter dois tipos com o mesmo nome em schemes diferentes
-    const seen = new Set();
-    const tipos = data
+    // Agrupa por nome — coleta todos os IDs de tipos homônimos (ex: dois "Incidente")
+    // Filtrar por ID no JQL garante que TODOS os chamados do tipo sejam retornados
+    const grouped = new Map();
+    data
       .filter(t => !t.subtask && !TIPOS_EXCLUIDOS.has(t.name))
-      .map(t => t.name)
-      .filter(name => seen.has(name) ? false : seen.add(name))
-      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      .forEach(t => {
+        if (!grouped.has(t.name)) grouped.set(t.name, []);
+        grouped.get(t.name).push(t.id);
+      });
+
+    const tipos = Array.from(grouped.entries())
+      .map(([name, ids]) => ({ name, ids }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
     // Cache de 1h — tipos mudam raramente
     res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');

@@ -356,24 +356,32 @@ function fetchUsuarios(q) {
 }
 
 // ── MULTI-SELECT TIPOS ───────────────────────────────────────────────────────
-var tiposSelected = new Set(); // vazio = sem filtro (todos os tipos)
+var tiposSelected = new Set(); // Set de IDs numéricos selecionados
+var tiposNomeMap  = {};        // { "1,10015": "Incidente", ... } para exibição
 
 function initTipos(tipos) {
   var container = document.getElementById('tipo-items');
   container.innerHTML = '';
+  tiposNomeMap = {};
   tipos.forEach(function(tipo) {
+    // tipo = { name: "Incidente", ids: ["1", "10015"] }
+    var name = typeof tipo === 'string' ? tipo : tipo.name;
+    var ids  = typeof tipo === 'string' ? [tipo] : (tipo.ids || [String(tipo.name)]);
+    var key  = ids.join(',');
+    tiposNomeMap[key] = name;
+
     var label = document.createElement('label');
     label.className = 'multiselect-item';
     var cb = document.createElement('input');
     cb.type = 'checkbox';
-    cb.value = tipo;
+    cb.value = key;
     cb.addEventListener('change', function() {
-      if (cb.checked) tiposSelected.add(tipo);
-      else tiposSelected.delete(tipo);
+      if (cb.checked) tiposSelected.add(key);
+      else tiposSelected.delete(key);
       atualizarTipoLabel();
     });
     label.appendChild(cb);
-    label.appendChild(document.createTextNode(tipo));
+    label.appendChild(document.createTextNode(name));
     container.appendChild(label);
   });
 }
@@ -411,9 +419,7 @@ function filtrarTipos(q) {
 
 function selecionarTodosTipos() {
   tiposSelected.clear();
-  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) {
-    cb.checked = false;
-  });
+  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
   atualizarTipoLabel();
 }
 
@@ -427,8 +433,9 @@ function atualizarTipoLabel() {
     var badge = btn.querySelector('.multiselect-badge');
     if (badge) badge.remove();
   } else {
+    var nomes = [...tiposSelected].map(function(k) { return tiposNomeMap[k] || k; });
     label.textContent = tiposSelected.size === 1
-      ? [...tiposSelected][0]
+      ? nomes[0]
       : tiposSelected.size + ' tipos';
     var existing = btn.querySelector('.multiselect-badge');
     if (!existing) {
@@ -481,7 +488,11 @@ function buscar() {
   if (vertical)  params.set('vertical',  vertical);
   if (portfolio) params.set('portfolio', portfolio);
   if (user)      params.set('user',      user);
-  if (tiposSelected.size > 0) params.set('types', [...tiposSelected].join(','));
+  if (tiposSelected.size > 0) {
+    // Envia todos os IDs de todos os tipos selecionados (ex: "1,10015,3")
+    var allIds = [...tiposSelected].join(',');
+    params.set('typeIds', allIds);
+  }
   var days = document.getElementById('sel-days').value;
   if (days && days !== '0') params.set('days', days);
 
@@ -670,14 +681,14 @@ function syncKnownKeysFromData(data) {
 
 // ── NOTIFICAÇÕES ─────────────────────────────────────────────────────────────
 function getConfig() {
-  var days  = document.getElementById('sel-days').value;
-  var types = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
+  var days    = document.getElementById('sel-days').value;
+  var typeIds = tiposSelected.size > 0 ? [...tiposSelected].join(',') : '';
   return {
     vertical:  document.getElementById('sel-vertical').value,
     portfolio: document.getElementById('sel-portfolio').value,
     user:      inpUserVal.value,
     days:      days !== '0' ? days : '',
-    types:     types,
+    typeIds:   typeIds,
     knownKeys: knownKeys
   };
 }

@@ -34,8 +34,8 @@ async function poll(config) {
     if (config.vertical)  params.set('vertical',  config.vertical);
     if (config.portfolio) params.set('portfolio', config.portfolio);
     if (config.user)      params.set('user',      config.user);
-    // Inclui types e days para que as notificações reflitam os filtros ativos na UI
-    if (config.types)     params.set('types',     config.types);
+    // Inclui typeIds e days para que as notificações reflitam os filtros ativos na UI
+    if (config.typeIds)   params.set('typeIds',   config.typeIds);
     if (config.days)      params.set('days',      config.days);
 
     const r    = await fetch(`/api/chamados?${params}`);

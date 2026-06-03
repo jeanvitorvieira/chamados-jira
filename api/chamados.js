@@ -50,15 +50,21 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Valida tipos e período
+  // 2. Valida tipos (por ID numérico) e período
+  // typeIds: CSV de IDs numéricos (ex: "1,10015") — mais preciso que filtrar por nome
+  const selectedTypeIds = (req.query.typeIds || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => /^\d+$/.test(s)) // aceita apenas IDs numéricos
+    .slice(0, 50);
   const selectedTypes = validateTypes(req.query.types);
   const days          = validateDays(req.query.days);
 
   // 3. Constrói JQLs separados — um para sem responsável, outro para o usuário.
   // Isso garante que cada seção seja precisa e independente do limite de 100.
-  const jqlUnassigned = buildJql(params, selectedTypes, days, 'unassigned');
+  const jqlUnassigned = buildJql(params, selectedTypeIds, selectedTypes, days, 'unassigned');
   const jqlAssigned   = params.user
-    ? buildJql(params, selectedTypes, days, 'assigned')
+    ? buildJql(params, selectedTypeIds, selectedTypes, days, 'assigned')
     : null;
 
   // 4. Executa as queries em paralelo
@@ -103,12 +109,17 @@ module.exports = async function handler(req, res) {
  */
 /**
  * Constrói JQL para uma das duas queries independentes.
+ * Prefere filtrar por ID numérico (typeIds) para cobrir tipos homônimos;
+ * cai no filtro por nome (types) como fallback.
  * @param {'unassigned'|'assigned'} mode
  */
-function buildJql({ vertical, portfolio, user }, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio, user }, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
-  if (selectedTypes && selectedTypes.length > 0) {
+  if (selectedTypeIds && selectedTypeIds.length > 0) {
+    // Filtra por ID numérico — captura todos os tipos com o mesmo nome
+    clauses.push(`issuetype in (${selectedTypeIds.join(', ')})`);
+  } else if (selectedTypes && selectedTypes.length > 0) {
     clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
   }
 
