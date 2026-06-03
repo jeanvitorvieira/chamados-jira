@@ -707,6 +707,14 @@ function atualizarKnownIssues(data) {
 }
 
 // ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
+// ── SERVICE WORKER (apenas para notificações) ─────────────────────────────────
+var swReg = null;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(function(reg) { swReg = reg; })
+    .catch(function() {});
+}
+
 function pedirPermissaoNotificacao() {
   if (!('Notification' in window)) return;
   if (Notification.permission === 'granted') {
@@ -723,29 +731,23 @@ function enviarBoasVindas() {
   var corpo = 'Você será notificado sobre:\n'
     + '• Novos chamados sem responsável\n'
     + (user ? '• Atualizações nos chamados de ' + user : '• Atualizações nos chamados atribuídos');
-  console.log('[Notif] Disparando boas-vindas. permission=', Notification.permission);
-  try {
-    var n = new Notification('✅ Alertas ativados — Chamados por Vertical', {
-      body: corpo,
-      tag:  'boas-vindas',
-      icon: '/favicon.ico'
-    });
-    console.log('[Notif] Criada com sucesso:', n);
-    n.onclick = function() { window.focus(); n.close(); };
-  } catch(e) {
-    console.error('[Notif] Erro ao criar notificação:', e);
-  }
+  notificar('✅ Alertas ativados — Chamados por Vertical', corpo, 'boas-vindas');
 }
 
 function notificar(titulo, corpo, tag) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  var n = new Notification(titulo, {
-    body: corpo,
-    tag:  tag,        // agrupa notificações do mesmo tipo (substitui a anterior)
-    renotify: true,
-    icon: '/favicon.ico'
-  });
-  n.onclick = function() { window.focus(); n.close(); };
+  // Usa SW registration (mais confiável no Chrome) com fallback para new Notification
+  if (swReg) {
+    swReg.showNotification(titulo, {
+      body:      corpo,
+      tag:       tag,
+      renotify:  true,
+      icon:      '/favicon.ico'
+    });
+  } else {
+    var n = new Notification(titulo, { body: corpo, tag: tag, renotify: true, icon: '/favicon.ico' });
+    n.onclick = function() { window.focus(); n.close(); };
+  }
 }
 
 // ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
