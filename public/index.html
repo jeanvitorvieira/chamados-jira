@@ -707,12 +707,9 @@ function atualizarKnownIssues(data) {
 }
 
 // ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
-// ── SERVICE WORKER (apenas para notificações) ─────────────────────────────────
-var swReg = null;
+// ── SERVICE WORKER (notificações) ────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then(function(reg) { swReg = reg; })
-    .catch(function() {});
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
 
 function pedirPermissaoNotificacao() {
@@ -736,17 +733,20 @@ function enviarBoasVindas() {
 
 function notificar(titulo, corpo, tag) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  // Usa SW registration (mais confiável no Chrome) com fallback para new Notification
-  if (swReg) {
-    swReg.showNotification(titulo, {
-      body:      corpo,
-      tag:       tag,
-      renotify:  true,
-      icon:      '/favicon.ico'
+  if ('serviceWorker' in navigator) {
+    // navigator.serviceWorker.ready aguarda o SW estar ativo — resolve o problema de timing
+    navigator.serviceWorker.ready.then(function(reg) {
+      reg.showNotification(titulo, {
+        body:     corpo,
+        tag:      tag,
+        renotify: true,
+        icon:     '/favicon.ico'
+      });
+    }).catch(function() {
+      new Notification(titulo, { body: corpo, tag: tag });
     });
   } else {
-    var n = new Notification(titulo, { body: corpo, tag: tag, renotify: true, icon: '/favicon.ico' });
-    n.onclick = function() { window.focus(); n.close(); };
+    new Notification(titulo, { body: corpo, tag: tag });
   }
 }
 
