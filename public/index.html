@@ -38,8 +38,6 @@
   .header-right { display: flex; align-items: center; gap: 10px; }
   .status-badge { background: #00C851; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 99px; letter-spacing: .04em; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--blue-dark); color: #fff; padding: 12px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-md); opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 200; white-space: nowrap; }
-  #toast.show { opacity: 1; }
   .new-issues-banner { background: var(--orange-light); border: 1.5px solid var(--orange); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px; font-size: 13px; font-weight: 600; color: var(--orange-dark); display: flex; align-items: center; gap: 8px; animation: fadeIn .4s; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
@@ -142,7 +140,6 @@
     <span class="status-badge" id="status-badge">Online</span>
   </div>
 </header>
-<div id="toast"></div>
 
 <main>
   <div class="filter-card">
@@ -413,6 +410,7 @@ function initTipos(tipos) {
     // Separador antes do primeiro tipo não-prioritário
     if (haRestantes && idx === prioritarios.length) {
       var sep = document.createElement('div');
+      sep.className = 'tipo-separator';
       sep.style.cssText = 'border-top:1px solid var(--gray-border);margin:4px 0;';
       container.appendChild(sep);
     }
@@ -441,9 +439,10 @@ function initTipos(tipos) {
   });
 
   atualizarTipoLabel();
+
+  // Se a primeira busca já rodou sem tipos carregados, rebusca para aplicar o filtro
+  if (buscaAtiva && tiposSelected.size > 0) buscar();
 }
-
-
 
 function toggleTipoDropdown() {
   var btn = document.getElementById('tipo-btn');
@@ -466,6 +465,18 @@ function filtrarTipos(q) {
     var nome = item.textContent.trim().toLowerCase();
     item.style.display = nome.includes(termo) ? '' : 'none';
   });
+  // Esconde o separador se não há itens visíveis de ambos os lados
+  var sep = document.querySelector('#tipo-items .tipo-separator');
+  if (!sep) return;
+  var items = Array.prototype.slice.call(document.querySelectorAll('#tipo-items .multiselect-item'));
+  var sepIdx = Array.prototype.indexOf.call(sep.parentNode.children, sep);
+  var visibleBefore = items.filter(function(el) {
+    return Array.prototype.indexOf.call(sep.parentNode.children, el) < sepIdx && el.style.display !== 'none';
+  }).length;
+  var visibleAfter = items.filter(function(el) {
+    return Array.prototype.indexOf.call(sep.parentNode.children, el) > sepIdx && el.style.display !== 'none';
+  }).length;
+  sep.style.display = (visibleBefore > 0 && visibleAfter > 0) ? '' : 'none';
 }
 
 function selecionarTodosTipos() {
@@ -977,15 +988,6 @@ function exibirBanner(html, tipo) {
   banner.innerHTML = html +
     ' <button onclick="buscar()" style="margin-left:auto;background:' + s.btn + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
   document.getElementById('results').insertAdjacentElement('beforebegin', banner);
-}
-
-var toastTimer;
-function showToast(msg) {
-  var t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
 }
 </script>
 </body>
