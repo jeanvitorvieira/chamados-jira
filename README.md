@@ -1,6 +1,6 @@
 # 📋 Chamados por Vertical — Betha Sistemas
 
-Painel web para consulta de chamados abertos no Jira de Atendimento, com filtros por portfólio, vertical e responsável, e alertas em tempo real via notificação do sistema operacional.
+Painel web para consulta e monitoramento em tempo real de chamados abertos no Jira de Atendimento, com filtros combinados, múltiplos responsáveis, polling automático e notificações nativas do sistema operacional.
 
 ---
 
@@ -14,21 +14,31 @@ Painel web para consulta de chamados abertos no Jira de Atendimento, com filtros
 6. [Desenvolvimento local](#desenvolvimento-local)
 7. [Referência da API](#referência-da-api)
 8. [Segurança](#segurança)
-9. [Customização](#customização)
+9. [Testes](#testes)
+10. [Customização](#customização)
 
 ---
 
 ## Visão geral
 
-O sistema resolve um problema recorrente de atendimento: identificar rapidamente chamados sem responsável ou atribuídos a um analista dentro de um portfólio/vertical específico, sem precisar abrir o Jira manualmente várias vezes ao dia.
+O sistema resolve um problema recorrente de atendimento: identificar rapidamente chamados sem responsável ou atribuídos a analistas dentro de um portfólio/vertical específico, sem precisar abrir o Jira manualmente várias vezes ao dia.
 
-Funcionalidades principais:
+**Funcionalidades:**
 
-- Filtros por portfólio, vertical e responsável
-- Autocomplete de usuários integrado ao Jira
-- Separação visual entre chamados sem dono e atribuídos ao responsável buscado
-- Alertas push via notificação do SO — dispara quando um novo chamado entra nos filtros
-- Polling automático a cada 5 minutos via Service Worker (roda em background, mesmo com aba minimizada)
+- Filtros por portfólio, vertical, múltiplos responsáveis, tipo de chamado e período
+- Busca automática ao alterar qualquer filtro (sem botão "Buscar")
+- Autocomplete de usuários integrado ao Jira, com deduplicação por e-mail (cobre contas duplicadas no Jira)
+- Múltiplos responsáveis simultâneos — cada chamado exibe o nome do seu dono na tabela
+- Tabela de "Sem responsável" com indicador de tempo na fila (badge colorido por urgência)
+- Tabela de "Atribuídos" com coluna de responsável e ordenação por qualquer coluna
+- Polling automático a cada 60 segundos com barra de progresso visual
+- Notificações nativas do SO (canto da tela) ao detectar novidades no ciclo de polling:
+  - Novo chamado sem responsável
+  - Mudança de status em chamado atribuído
+  - Movimentação (updated alterado com status igual)
+  - Chamado atribuído encerrado
+- Filtros persistidos via `localStorage` e restaurados com busca automática ao recarregar
+- Badge no título da aba com contador de novidades não vistas
 
 ---
 
@@ -38,12 +48,16 @@ Funcionalidades principais:
 chamados-jira/
 ├── api/                     # Serverless functions (Vercel)
 │   ├── _lib/
-│   │   ├── jira.js          # Cliente HTTP para a API REST do Jira
+│   │   ├── jira.js          # Cliente HTTP para a API REST do Jira (auth, timeout, erros)
 │   │   └── validate.js      # Sanitização de inputs e prevenção de JQL Injection
-│   ├── chamados.js          # GET /api/chamados — busca issues
+│   ├── chamados.js          # GET /api/chamados — busca issues (unassigned + assigned)
+│   ├── tipos.js             # GET /api/tipos    — lista tipos de chamado do Jira
+│   ├── issues.js            # GET /api/issues   — verifica status de tickets por chave
 │   └── usuarios.js          # GET /api/usuarios — autocomplete de usuários
-├── index.html               # Frontend SPA (sem framework, sem build step)
-├── sw.js                    # Service Worker — polling em background + notificações
+├── public/
+│   ├── index.html           # Frontend SPA (HTML/CSS/JS puro, sem framework, sem build)
+│   └── sw.js                # Service Worker — exibe notificações nativas via browser
+├── test_chamados.js         # Suite de 47 testes mockados (Node.js, sem dependências)
 ├── package.json
 ├── vercel.json              # Configuração de deploy e headers de segurança
 └── README.md
@@ -52,20 +66,31 @@ chamados-jira/
 ### Fluxo de dados
 
 ```
-Browser → GET /api/chamados?vertical=X&user=Y
-            └─→ validate.js   (valida e escapa parâmetros)
-            └─→ jira.js       (autentica e chama a API REST do Jira)
-            └─→ mapIssue()    (transforma resposta em DTO limpo)
-         ← JSON { ok, total, issues[], jql }
+Browser
+  │
+  ├─ GET /api/tipos  (on load — popula multiselect, dispara busca se filtros restaurados)
+  │
+  ├─ GET /api/chamados?vertical=X&portfolio=Y&users=a,b&typeIds=10001,10002&days=30
+  │     └─→ validate.js     (valida vertical/portfolio contra lista fechada, escapa users)
+  │     └─→ buildJql()      (monta 2 JQLs: unassigned + assigned, em paralelo)
+  │     └─→ jira.js         (autentica, timeout 15s, normaliza erros HTTP)
+  │     └─→ mapIssue()      (DTO limpo: key, summary, status, assignee, priority…)
+  │     ← JSON { ok, total, unassigned[], assigned[], totalUnassigned, totalAssigned }
+  │
+  ├─ GET /api/usuarios?q=jean  (autocomplete com debounce 300ms)
+  │
+  └─ GET /api/issues?keys=X-1,X-2  (polling: verifica se tickets sumiram e foram encerrados)
 ```
 
-### Por que sem framework de frontend?
+### Decisões de arquitetura
 
-O frontend é HTML/CSS/JS puro por escolha deliberada. Para uma ferramenta interna de consulta, um framework adicionaria complexidade de build sem benefício real. O resultado é um arquivo único que funciona imediatamente ao abrir.
+**Frontend sem framework:** HTML/CSS/JS puro por escolha deliberada. Para uma ferramenta interna de consulta, um framework adicionaria complexidade de build sem benefício real. O resultado é um arquivo único que funciona imediatamente ao abrir.
 
-### Por que Vercel Serverless Functions?
+**Vercel Serverless Functions como proxy:** as credenciais do Jira ficam exclusivamente nas variáveis de ambiente do Vercel. O browser nunca as vê. As funções recebem a requisição, chamam o Jira autenticadas e devolvem apenas os dados necessários.
 
-As credenciais do Jira ficam exclusivamente no servidor (variáveis de ambiente do Vercel). O browser nunca as vê. As funções atuam como proxy autenticado: recebem a requisição do frontend, chamam o Jira com as credenciais e devolvem apenas os dados necessários.
+**Dois JQLs paralelos:** a busca de chamados executa duas queries independentes em `Promise.all` — uma para sem responsável, outra para os atribuídos — evitando lógica de OR no JQL e permitindo contagens separadas.
+
+**Polling no frontend (não SW):** o polling de 60s roda no thread principal da página para ter acesso direto ao DOM (barra de progresso, banners). O Service Worker é usado exclusivamente para exibir notificações nativas, que funcionam mesmo com a aba minimizada.
 
 ---
 
@@ -76,21 +101,21 @@ As credenciais do Jira ficam exclusivamente no servidor (variáveis de ambiente 
 - Credenciais de acesso à API do Jira Server:
   - URL base da instância (ex: `https://atendimento.betha.com.br`)
   - Usuário de serviço dedicado e sua senha
-- Node.js 18+ (apenas para desenvolvimento local)
+- Node.js 18+ (apenas para desenvolvimento local e testes)
 
-> **Recomendação:** use um usuário de serviço dedicado para a integração (ex: `atendimento-api`), com permissão apenas de leitura nos projetos relevantes. Nunca use uma conta pessoal em produção.
+> **Recomendação:** use um usuário de serviço dedicado para a integração, com permissão apenas de leitura nos projetos relevantes. Nunca use uma conta pessoal em produção.
 
 ---
 
 ## Variáveis de ambiente
 
-| Variável        | Obrigatória | Descrição                                              | Exemplo                                  |
-|-----------------|-------------|--------------------------------------------------------|------------------------------------------|
-| `JIRA_URL`      | ✅          | URL base da instância Jira (sem barra final)           | `https://atendimento.betha.com.br`       |
-| `JIRA_USER`     | ✅          | Username do usuário de serviço no Jira                 | `mcpintegracao`                          |
-| `JIRA_PASSWORD` | ✅          | Senha do usuário de serviço                            | `*****`                                  |
+| Variável        | Obrigatória | Descrição                                    | Exemplo                            |
+|-----------------|-------------|----------------------------------------------|------------------------------------|
+| `JIRA_URL`      | ✅          | URL base da instância Jira (sem barra final) | `https://atendimento.betha.com.br` |
+| `JIRA_USER`     | ✅          | Username do usuário de serviço no Jira       | `mcpintegracao`                    |
+| `JIRA_PASSWORD` | ✅          | Senha do usuário de serviço                  | `*****`                            |
 
-As variáveis são lidas em runtime pelas serverless functions. Elas **nunca chegam ao browser**.
+As variáveis são lidas em runtime pelas serverless functions e **nunca chegam ao browser**.
 
 ---
 
@@ -99,12 +124,10 @@ As variáveis são lidas em runtime pelas serverless functions. Elas **nunca che
 ### 1. Suba o código para o GitHub
 
 ```bash
-# Clone ou descompacte o projeto, depois:
 cd chamados-jira
 git init
 git add .
 git commit -m "chore: initial commit"
-# Crie um repositório no GitHub e faça push
 git remote add origin https://github.com/seu-usuario/chamados-jira.git
 git push -u origin main
 ```
@@ -112,19 +135,19 @@ git push -u origin main
 ### 2. Importe no Vercel
 
 1. Acesse [vercel.com/new](https://vercel.com/new)
-2. Clique em **"Import Git Repository"** e selecione o repositório criado
+2. Clique em **"Import Git Repository"** e selecione o repositório
 3. Mantenha todas as configurações padrão (Framework: Other)
-4. Clique em **Deploy** — o primeiro deploy será feito sem as variáveis; isso é esperado
+4. Clique em **Deploy**
 
 ### 3. Configure as variáveis de ambiente
 
-1. No dashboard do Vercel, abra o projeto → **Settings → Environment Variables**
-2. Adicione as três variáveis descritas na seção acima
+1. No dashboard do Vercel: **Settings → Environment Variables**
+2. Adicione as três variáveis da tabela acima
 3. Marque os ambientes: **Production**, **Preview** e **Development**
 
 ### 4. Redeploy
 
-Após salvar as variáveis, vá em **Deployments → ⋯ → Redeploy**. O site estará funcional com a URL gerada pelo Vercel (ex: `chamados-jira.vercel.app`).
+Após salvar as variáveis: **Deployments → ⋯ → Redeploy**.
 
 ---
 
@@ -138,7 +161,7 @@ npm install
 cp .env.example .env.local
 # Edite .env.local com suas credenciais reais
 
-# Inicia o servidor local (emula o ambiente Vercel)
+# Inicia o servidor local (emula o ambiente Vercel com hot reload)
 npm run dev
 # Acesse http://localhost:3000
 ```
@@ -151,25 +174,25 @@ JIRA_USER=
 JIRA_PASSWORD=
 ```
 
-> O `vercel dev` emula as serverless functions localmente com hot reload.
-
 ---
 
 ## Referência da API
 
 ### `GET /api/chamados`
 
-Retorna issues abertas no Jira filtradas pelos parâmetros informados.
+Retorna issues abertas filtradas pelos parâmetros informados, separadas em dois grupos: sem responsável e atribuídas.
 
 **Parâmetros de query:**
 
-| Parâmetro   | Tipo   | Obrigatório | Descrição                                                |
-|-------------|--------|-------------|----------------------------------------------------------|
-| `vertical`  | string | Não         | Nome da vertical (deve estar na lista de valores válidos)|
-| `portfolio` | string | Não         | Nome do portfólio (deve estar na lista de valores válidos)|
-| `user`      | string | Não         | Username do Jira do responsável                          |
+| Parâmetro  | Tipo   | Obrigatório | Descrição                                                          |
+|------------|--------|-------------|--------------------------------------------------------------------|
+| `vertical` | string | Não         | Nome da vertical (deve estar na lista válida em `validate.js`)     |
+| `portfolio`| string | Não         | Nome do portfólio (deve estar na lista válida em `validate.js`)    |
+| `users`    | string | Não         | CSV de usernames do Jira (ex: `jean.vieira,marlon.ern`), máx. 10  |
+| `typeIds`  | string | Não         | CSV de IDs numéricos de tipo de issue (ex: `10001,10002`)          |
+| `days`     | number | Não         | Período em dias: `0` (qualquer data), `30`, `60` ou `90`           |
 
-Se `user` for informado, retorna chamados **sem responsável OU atribuídos a esse usuário**. Se omitido, retorna apenas os sem responsável.
+Se `users` for omitido, a seção `assigned` retorna vazia. Pelo menos 2 parâmetros preenchidos são exigidos pelo frontend antes de disparar a requisição.
 
 **Resposta de sucesso (200):**
 
@@ -177,40 +200,63 @@ Se `user` for informado, retorna chamados **sem responsável OU atribuídos a es
 {
   "ok": true,
   "total": 51,
-  "jql": "cf[32400] = \"Portfólio Pequenas Contas\" AND ...",
-  "issues": [
+  "totalUnassigned": 8,
+  "totalAssigned": 43,
+  "unassigned": [
     {
       "key": "BTHSC-321508",
       "summary": "Empenho: Não é permitido número duplicado",
       "status": "Aguardando Manutenção",
-      "statusCat": "To Do",
-      "priority": "1",
+      "priority": "High",
       "type": "Incidente",
-      "assignee": "Jean Vitor Vieira",
+      "assignee": null,
       "updated": "2026-06-02T08:04:49.000-0300",
       "created": "2026-06-01T11:55:53.000-0300",
       "vertical": "Contábil",
       "portfolio": "Portfólio Pequenas Contas",
       "url": "https://atendimento.betha.com.br/browse/BTHSC-321508"
     }
-  ]
+  ],
+  "assigned": [ /* mesma estrutura, com assignee preenchido */ ]
 }
 ```
 
 **Respostas de erro:**
 
-| Status | `code`              | Causa                                      |
-|--------|---------------------|--------------------------------------------|
-| 400    | `INVALID_PARAMS`    | Parâmetro inválido (vertical não permitida, etc.) |
-| 405    | `METHOD_NOT_ALLOWED`| Método HTTP diferente de GET               |
-| 500    | `CONFIG_ERROR`      | Variáveis de ambiente não configuradas     |
-| 502    | `JIRA_ERROR`        | Erro retornado pela API do Jira            |
+| Status | `code`               | Causa                                               |
+|--------|----------------------|-----------------------------------------------------|
+| 400    | `INVALID_PARAMS`     | Vertical ou portfólio fora da lista permitida       |
+| 400    | `INVALID_FILTER`     | Tipo de issue não existe no Jira                    |
+| 405    | `METHOD_NOT_ALLOWED` | Método HTTP diferente de GET                        |
+| 500    | `CONFIG_ERROR`       | Variáveis de ambiente não configuradas              |
+| 502    | `JIRA_ERROR`         | Erro retornado pela API do Jira                     |
+| 504    | `TIMEOUT`            | Consulta ao Jira excedeu 15s                        |
+
+---
+
+### `GET /api/tipos`
+
+Retorna os tipos de issue disponíveis na instância Jira, agrupados por nome (tipos homônimos têm múltiplos IDs consolidados). Resposta cacheada por 1 hora.
+
+**Resposta de sucesso (200):**
+
+```json
+{
+  "ok": true,
+  "tipos": [
+    { "name": "Dúvida",    "ids": ["10001"] },
+    { "name": "Incidente", "ids": ["10002", "10015"] }
+  ]
+}
+```
 
 ---
 
 ### `GET /api/usuarios`
 
-Busca usuários no Jira por nome ou e-mail. Usado pelo autocomplete do frontend.
+Busca usuários no Jira por nome ou e-mail. Usado pelo autocomplete do frontend (debounce de 300ms, mín. 2 caracteres).
+
+> **Nota:** o Jira pode retornar dois registros para o mesmo usuário (username e e-mail como username). O frontend deduplica automaticamente por e-mail antes de exibir na lista.
 
 **Parâmetros de query:**
 
@@ -225,9 +271,37 @@ Busca usuários no Jira por nome ou e-mail. Usado pelo autocomplete do frontend.
   "ok": true,
   "users": [
     {
-      "name": "jean.vieira@betha.com.br",
+      "name": "jean.vieira",
       "displayName": "Jean Vitor Vieira",
       "email": "jean.vieira@betha.com.br"
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/issues`
+
+Verifica o status atual de tickets específicos por chave. Usado pelo polling para detectar chamados atribuídos que foram encerrados.
+
+**Parâmetros de query:**
+
+| Parâmetro | Tipo   | Obrigatório | Descrição                                  |
+|-----------|--------|-------------|--------------------------------------------|
+| `keys`    | string | Sim         | CSV de chaves Jira (ex: `X-1,X-2`), máx. 20 |
+
+**Resposta de sucesso (200):**
+
+```json
+{
+  "ok": true,
+  "issues": [
+    {
+      "key": "BTHSC-321508",
+      "status": "Resolvido",
+      "statusCat": "done",
+      "assignee": "Jean Vitor Vieira"
     }
   ]
 }
@@ -239,10 +313,11 @@ Busca usuários no Jira por nome ou e-mail. Usado pelo autocomplete do frontend.
 
 ### Proteção contra JQL Injection
 
-Valores recebidos via query string nunca são interpolados diretamente no JQL. O módulo `validate.js` faz duas camadas de proteção:
+Valores recebidos via query string nunca são interpolados diretamente no JQL. O módulo `validate.js` aplica duas camadas:
 
-1. **Lista fechada** para vertical e portfólio: qualquer valor fora da lista predefinida é rejeitado com HTTP 400.
-2. **Escaping** para o campo `user`: aspas e barras invertidas são escapadas antes de entrar na query JQL.
+1. **Lista fechada** para `vertical` e `portfolio` — qualquer valor fora do Set predefinido é rejeitado com HTTP 400.
+2. **Escaping** para `users` e `types` — aspas duplas e barras invertidas são escapadas antes de entrar na query JQL.
+3. **Filtro por ID** para tipos — o frontend envia `typeIds` (IDs numéricos), não nomes, eliminando risco de injeção via nomes de tipo.
 
 ### Credenciais seguras
 
@@ -257,6 +332,30 @@ O `vercel.json` aplica headers de segurança em todas as respostas:
 - `Referrer-Policy: strict-origin-when-cross-origin` — limita vazamento de URL
 - `Permissions-Policy` — desabilita câmera, microfone e geolocalização
 - `Cache-Control: no-store` nas rotas de API — impede cache de dados sensíveis
+
+### Prevenção de XSS
+
+Todo dado externo (sumário, nome de usuário, status) é escapado via `escHtml()` antes de ser inserido no DOM. Nomes de usuário no autocomplete usam `textContent` (não `innerHTML`).
+
+---
+
+## Testes
+
+O projeto inclui uma suite de 47 testes mockados em `test_chamados.js`, sem dependências externas:
+
+```bash
+node test_chamados.js
+```
+
+Cobertura:
+
+- `validateSearchParams`, `validateDays`, `validateUsers`, `validateTypes`, `validateUserQuery`
+- `buildJql` — 7 cenários incluindo múltiplos usuários, typeIds vs types, filtro de data
+- `mapIssue` — campos normais e campos ausentes com fallback
+- `detectarNovidades` — 7 cenários: novo sem responsável, retorno para fila, mudança de status, movimentação, sem baseline
+- Dedup do autocomplete — 4 cenários incluindo o caso real Maycon/Marlon (duplicata por e-mail)
+- Validação de filtros (`preenchidos`) — 5 cenários
+- Alinhamento de colunas das tabelas
 
 ---
 
@@ -273,20 +372,24 @@ const VERTICAIS_VALIDAS = new Set([
 ]);
 ```
 
-Depois adicione a opção correspondente no `<select>` do `index.html`.
+Depois adicione a `<option>` correspondente no `<select id="sel-vertical">` do `public/index.html`.
 
 ### Adicionar um novo portfólio
 
-Mesmo processo: edite `PORTFOLIOS_VALIDOS` em `validate.js` e o `<select>` no `index.html`.
+Mesmo processo: edite `PORTFOLIOS_VALIDOS` em `validate.js` e o `<select id="sel-portfolio">` no `index.html`.
 
-### Alterar o intervalo de polling de notificações
+### Alterar o intervalo de polling
 
-Em `sw.js`, altere a constante no topo do arquivo:
+Em `public/index.html`, altere a constante:
 
 ```js
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos — ajuste aqui
+var REFRESH_INTERVAL = 60; // segundos — altere aqui
 ```
 
 ### Alterar os campos retornados por chamado
 
-Em `api/chamados.js`, edite o array `FIELDS` com os IDs dos campos Jira desejados, e atualize a função `mapIssue()` para mapeá-los no DTO de saída.
+Em `api/chamados.js`, edite o array `FIELDS` com os IDs dos campos Jira desejados e atualize a função `mapIssue()` para mapeá-los no DTO de saída.
+
+### Adicionar ou remover tipos excluídos
+
+Em `api/tipos.js`, edite o Set `TIPOS_EXCLUIDOS` com os nomes exatos dos tipos que não devem aparecer no filtro.
