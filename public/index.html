@@ -962,4 +962,31 @@ function limparBanners() {
 }
 
 var BANNER_STYLES = {
-  warning: { bg: 'var(--
+  warning: { bg: 'var(--orange-light)', border: 'var(--orange)',    color: 'var(--orange-dark)',  btn: 'var(--orange)'    },
+  info:    { bg: 'var(--blue-light)',   border: 'var(--blue-mid)',   color: 'var(--blue-primary)', btn: 'var(--blue-mid)'  },
+  success: { bg: 'var(--green-light)',  border: 'var(--green)',      color: 'var(--green)',        btn: 'var(--green)'     },
+};
+
+function exibirBanner(html, tipo) {
+  var s = BANNER_STYLES[tipo] || BANNER_STYLES.info;
+  var banner = document.createElement('div');
+  banner.className = 'new-issues-banner';
+  banner.style.background  = s.bg;
+  banner.style.borderColor = s.border;
+  banner.style.color       = s.color;
+  banner.innerHTML = html +
+    ' <button onclick="buscar()" style="margin-left:auto;background:' + s.btn + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
+  document.getElementById('results').insertAdjacentElement('beforebegin', banner);
+}
+
+var toastTimer;
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
+}
+</script>
+</body>
+</html>
