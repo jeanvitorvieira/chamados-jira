@@ -257,6 +257,7 @@ var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
 var knownIssues = {};         // { [key]: { status, assignee, updated } } — baseline do ciclo atual
 var pendingCount = 0;         // contador para badge no título da aba
 var pendingTiposRestore = null; // tipos a restaurar após initTipos
+var pendingAutoSearch   = false; // busca automática pendente após restaurar filtros
 
 var inpUser = document.getElementById('inp-user');
 var acList  = document.getElementById('autocomplete-list');
@@ -334,9 +335,10 @@ function fetchUsuarios(q) {
       // Deduplica por name (API do Jira pode retornar duplicatas) e remove já selecionados
       var seen = {};
       var users = (data.users || []).filter(function(u) {
-        if (seen[u.name]) return false;
-        seen[u.name] = true;
-        return !selectedUsers.some(function(s) { return s.name === u.name; });
+        var key = (u.name || '').toLowerCase();
+        if (seen[key]) return false;
+        seen[key] = true;
+        return !selectedUsers.some(function(s) { return (s.name || '').toLowerCase() === key; });
       });
       acList.innerHTML = '';
       if (!users.length) { acList.classList.remove('open'); return; }
@@ -468,6 +470,12 @@ function initTipos(tipos) {
 
   // Se a primeira busca já rodou sem tipos carregados, rebusca para aplicar o filtro
   if (buscaAtiva && tiposSelected.size > 0) buscar();
+
+  // Após restaurar filtros salvos, dispara busca automática
+  if (pendingAutoSearch) {
+    pendingAutoSearch = false;
+    buscar();
+  }
 }
 
 function toggleTipoDropdown() {
@@ -909,6 +917,12 @@ function restaurarFiltros() {
       f.users.forEach(function(u) { adicionarUserTag(u); });
     }
     if (f.tipos && f.tipos.length) pendingTiposRestore = f.tipos;
+
+    // Agenda busca automática se há filtros suficientes — initTipos irá dispará-la
+    var portfolio = document.getElementById('sel-portfolio').value;
+    var vertical  = document.getElementById('sel-vertical').value;
+    var preenchidos = [portfolio, vertical, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+    if (preenchidos >= 2) pendingAutoSearch = true;
   } catch(e) {}
 }
 restaurarFiltros();
