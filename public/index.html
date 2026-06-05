@@ -808,8 +808,12 @@ function detectarNovidades(data) {
   var unassigned = data.unassigned || [];
   var assigned   = data.assigned   || [];
 
-  // Novos chamados sem responsável (não existiam no baseline)
-  var novosUnassigned = unassigned.filter(function(i) { return !knownIssues[i.key]; });
+  // Novos sem responsável: completamente novo OU estava atribuído e voltou para a fila
+  var novosUnassigned = unassigned.filter(function(i) {
+    var prev = knownIssues[i.key];
+    return !prev || prev.assignee !== null;
+  });
+  var novosUnassignedKeys = new Set(novosUnassigned.map(function(i) { return i.key; }));
 
   // Mudança de status em chamados atribuídos
   var statusAlterado = assigned.filter(function(i) {
@@ -818,10 +822,12 @@ function detectarNovidades(data) {
   }).map(function(i) {
     return Object.assign({}, i, { prevStatus: knownIssues[i.key].status });
   });
+  var statusAlteradoKeys = new Set(statusAlterado.map(function(i) { return i.key; }));
 
-  // Movimentação sem mudança de status (updated mudou, status igual) — qualquer chamado
+  // Movimentação (updated mudou, status igual) — exclui tickets já cobertos acima
   var all = unassigned.concat(assigned);
   var movimentados = all.filter(function(i) {
+    if (novosUnassignedKeys.has(i.key) || statusAlteradoKeys.has(i.key)) return false;
     var prev = knownIssues[i.key];
     return prev && prev.status === i.status && prev.updated !== i.updated;
   });
