@@ -18,7 +18,7 @@
  */
 
 const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
-const { validateSearchParams, validateTypes, validateDays, ValidationError } = require('./_lib/validate');
+const { validateSearchParams, validateTypes, validateDays, validateUsers, ValidationError } = require('./_lib/validate');
 
 /** Campos retornados para cada issue. */
 const FIELDS = [
@@ -50,21 +50,21 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Valida tipos (por ID numérico) e período
-  // typeIds: CSV de IDs numéricos (ex: "1,10015") — mais preciso que filtrar por nome
+  // 2. Valida tipos (por ID numérico), período e usuários (suporte a múltiplos)
   const selectedTypeIds = (req.query.typeIds || '')
     .split(',')
     .map(s => s.trim())
-    .filter(s => /^\d+$/.test(s)) // aceita apenas IDs numéricos
+    .filter(s => /^\d+$/.test(s))
     .slice(0, 50);
   const selectedTypes = validateTypes(req.query.types);
   const days          = validateDays(req.query.days);
+  // `users` aceita CSV de usernames; fallback para `user` (legado single-user)
+  const users         = validateUsers(req.query.users || req.query.user || '');
 
-  // 3. Constrói JQLs separados — um para sem responsável, outro para o usuário.
-  // Isso garante que cada seção seja precisa e independente do limite de 100.
-  const jqlUnassigned = buildJql(params, selectedTypeIds, selectedTypes, days, 'unassigned');
-  const jqlAssigned   = params.user
-    ? buildJql(params, selectedTypeIds, selectedTypes, days, 'assigned')
+  // 3. Constrói JQLs separados — um para sem responsável, outro para os usuários.
+  const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
+  const jqlAssigned   = users.length > 0
+    ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
     : null;
 
   // 4. Executa as queries em paralelo
@@ -115,11 +115,10 @@ module.exports = async function handler(req, res) {
  * cai no filtro por nome (types) como fallback.
  * @param {'unassigned'|'assigned'} mode
  */
-function buildJql({ vertical, portfolio, user }, selectedTypeIds, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
   if (selectedTypeIds && selectedTypeIds.length > 0) {
-    // Filtra por ID numérico — captura todos os tipos com o mesmo nome
     clauses.push(`issuetype in (${selectedTypeIds.join(', ')})`);
   } else if (selectedTypes && selectedTypes.length > 0) {
     clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
@@ -129,8 +128,11 @@ function buildJql({ vertical, portfolio, user }, selectedTypeIds, selectedTypes,
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
-  if (mode === 'assigned' && user) {
-    clauses.push(`assignee = "${user}"`);
+  if (mode === 'assigned' && users.length > 0) {
+    // Suporta múltiplos responsáveis
+    clauses.push(users.length === 1
+      ? `assignee = "${users[0]}"`
+      : `assignee in (${users.map(u => `"${u}"`).join(', ')})`);
   } else {
     clauses.push('assignee is EMPTY');
   }

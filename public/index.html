@@ -124,6 +124,18 @@
   .multiselect-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
   .multiselect-item:hover { background: var(--gray-bg); }
   .multiselect-item input[type=checkbox] { accent-color: var(--blue-primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+  /* Multi-user tags */
+  .user-tags-wrap { border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 4px 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; cursor: text; min-height: 40px; transition: border-color .15s; background: var(--white); }
+  .user-tags-wrap:focus-within { border-color: var(--blue-mid); }
+  .user-tags-wrap input { border: none; outline: none; font-size: 13px; color: var(--text-primary); background: transparent; min-width: 120px; flex: 1; padding: 3px 0; }
+  .user-tag { background: var(--blue-light); color: var(--blue-primary); border-radius: 4px; padding: 2px 6px 2px 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .user-tag .tag-x { cursor: pointer; font-size: 14px; line-height: 1; color: var(--blue-mid); font-weight: 400; }
+  .user-tag .tag-x:hover { color: var(--red); }
+  /* Tempo na fila */
+  .tempo-fila { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-top: 3px; }
+  .tempo-fila.ok  { background: #E8F5E9; color: #2E7D32; }
+  .tempo-fila.avg { background: #FFF3E0; color: #E65100; }
+  .tempo-fila.bad { background: var(--red-light); color: var(--red); }
 </style>
 </head>
 <body>
@@ -171,10 +183,11 @@
       <div class="form-group">
         <label>Responsável</label>
         <div class="autocomplete-wrap">
-          <input type="text" id="inp-user" placeholder="Digite o nome ou e-mail..." autocomplete="off">
-          <input type="hidden" id="inp-user-val">
+          <div class="user-tags-wrap" id="user-tags-wrap">
+            <div id="user-tags"></div>
+            <input type="text" id="inp-user" placeholder="Adicionar responsável..." autocomplete="off">
+          </div>
           <div class="autocomplete-list" id="autocomplete-list"></div>
-          <span class="inp-hint">Selecione um usuário da lista</span>
         </div>
       </div>
     </div>
@@ -236,16 +249,17 @@
 
 <script>
 var acTimeout        = null;
-var selectedUser     = null;
+var selectedUsers    = [];    // array de { name, displayName } — múltiplos responsáveis
 var buscaAtiva       = false; // true após a primeira busca bem-sucedida
 var autoRefreshTimer = null;  // setInterval do countdown de atualização
 var refreshCountdown = 0;
 var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
 var knownIssues = {};         // { [key]: { status, assignee, updated } } — baseline do ciclo atual
+var pendingCount = 0;         // contador para badge no título da aba
+var pendingTiposRestore = null; // tipos a restaurar após initTipos
 
 var inpUser = document.getElementById('inp-user');
-var inpUserVal = document.getElementById('inp-user-val');
-var acList = document.getElementById('autocomplete-list');
+var acList  = document.getElementById('autocomplete-list');
 
 // ── SEGURANÇA: escape de HTML para prevenir XSS ───────────────────────────────
 function escHtml(s) {
@@ -275,8 +289,6 @@ fetch('/api/tipos')
 // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
 inpUser.addEventListener('input', function() {
   clearTimeout(acTimeout);
-  selectedUser = null;
-  inpUserVal.value = '';
   inpUser.classList.remove('inp-warn');
   var q = inpUser.value.trim();
   if (q.length < 2) { acList.classList.remove('open'); return; }
@@ -288,10 +300,7 @@ inpUser.addEventListener('blur', function() {
   setTimeout(function() {
     if (!acList.contains(document.activeElement)) {
       acList.classList.remove('open');
-      // Avisa se o usuário digitou algo mas não selecionou da lista
-      if (inpUser.value.trim() && !inpUserVal.value) {
-        inpUser.classList.add('inp-warn');
-      }
+      if (inpUser.value.trim()) inpUser.classList.add('inp-warn');
     }
   }, 150);
 });
@@ -331,12 +340,11 @@ function fetchUsuarios(q) {
         // mousedown antes do blur — previne que a lista feche antes do click
         item.addEventListener('mousedown', function(e) { e.preventDefault(); });
         item.addEventListener('click', function() {
-          selectedUser = u;
-          inpUser.value = u.displayName;
-          inpUserVal.value = u.name;
+          adicionarUserTag(u);
+          inpUser.value = '';
           inpUser.classList.remove('inp-warn');
           acList.classList.remove('open');
-          buscar(); // auto-search ao selecionar responsável
+          buscar();
         });
         // Usa textContent para evitar XSS com dados do Jira
         var nameEl = document.createElement('span');
@@ -438,6 +446,18 @@ function initTipos(tipos) {
     container.appendChild(label);
   });
 
+  // Restaura seleção persistida (sobrescreve a pré-seleção padrão se houver dado salvo)
+  if (pendingTiposRestore) {
+    tiposSelected.clear();
+    document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    pendingTiposRestore.forEach(function(key) {
+      tiposSelected.add(key);
+      var cb = document.querySelector('#tipo-items input[value="' + key + '"]');
+      if (cb) cb.checked = true;
+    });
+    pendingTiposRestore = null;
+  }
+
   atualizarTipoLabel();
 
   // Se a primeira busca já rodou sem tipos carregados, rebusca para aplicar o filtro
@@ -533,10 +553,10 @@ document.addEventListener('click', function(e) {
 function buscar(silencioso) {
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
-  var user      = inpUserVal.value;
+  var userNames = selectedUsers.map(function(u) { return u.name; });
 
-  // Bloqueia se o usuário digitou no campo responsável mas não selecionou da lista
-  if (inpUser.value.trim() && !user) {
+  // Bloqueia se digitou algo no campo responsável mas não selecionou da lista
+  if (inpUser.value.trim()) {
     if (!silencioso) {
       inpUser.classList.add('inp-warn');
       document.getElementById('results').innerHTML =
@@ -544,14 +564,12 @@ function buscar(silencioso) {
         'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
         '</div>';
       document.getElementById('chips').style.display = 'none';
-    } else if (buscaAtiva) {
-      agendarProximoRefresh(); // mantém polling vivo mesmo retornando cedo
-    }
+    } else if (buscaAtiva) { agendarProximoRefresh(); }
     return;
   }
 
   // Exige pelo menos 2 filtros preenchidos
-  var preenchidos = [vertical, portfolio, user].filter(Boolean).length;
+  var preenchidos = [vertical, portfolio, userNames.length ? '1' : ''].filter(Boolean).length;
   if (preenchidos < 2) {
     if (!silencioso) {
       document.getElementById('results').innerHTML =
@@ -559,19 +577,15 @@ function buscar(silencioso) {
         'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
         '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
       document.getElementById('chips').style.display = 'none';
-    } else if (buscaAtiva) {
-      agendarProximoRefresh(); // mantém polling vivo mesmo retornando cedo
-    }
+    } else if (buscaAtiva) { agendarProximoRefresh(); }
     return;
   }
 
   var params = new URLSearchParams();
-  if (vertical)  params.set('vertical',  vertical);
-  if (portfolio) params.set('portfolio', portfolio);
-  if (user)      params.set('user',      user);
-  if (tiposSelected.size > 0) {
-    params.set('typeIds', [...tiposSelected].join(','));
-  }
+  if (vertical)           params.set('vertical',  vertical);
+  if (portfolio)          params.set('portfolio', portfolio);
+  if (userNames.length)   params.set('users',     userNames.join(','));
+  if (tiposSelected.size > 0) params.set('typeIds', [...tiposSelected].join(','));
   var days = document.getElementById('sel-days').value;
   if (days && days !== '0') params.set('days', days);
 
@@ -599,13 +613,14 @@ function buscar(silencioso) {
       }
 
       atualizarKnownIssues(data);
+      if (!silencioso) salvarFiltros();
 
       if (!buscaAtiva) {
         buscaAtiva = true;
         pedirPermissaoNotificacao();
         iniciarPolling();
       } else {
-        agendarProximoRefresh(); // reagenda após refresh silencioso
+        agendarProximoRefresh();
       }
     })
     .catch(function(err) {
@@ -695,14 +710,19 @@ function sortIssues(issues, col, dir) {
   });
 }
 
-function renderTable(issues, tableId) {
+function renderTable(issues, tableId, showTempoFila) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
 
   var sorted = sortState.col ? sortIssues(issues, sortState.col, sortState.dir) : issues;
 
-  var headers = ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Atualizado'];
+  var headers = showTempoFila
+    ? ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Na fila','Atualizado']
+    : ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Atualizado'];
+  var sortKeysLocal = showTempoFila
+    ? ['key','summary','portfolio','vertical','status','priority','type','updated','updated']
+    : SORT_KEYS;
   var ths = headers.map(function(h, idx) {
-    var col = SORT_KEYS[idx];
+    var col = sortKeysLocal[idx];
     var cls = 'sortable' + (sortState.col === col ? (' sort-' + sortState.dir) : '');
     return '<th class="' + cls + '" onclick="onSort(\'' + tableId + '\',\'' + col + '\')">' + h + '</th>';
   }).join('');
@@ -717,6 +737,7 @@ function renderTable(issues, tableId) {
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
+      (showTempoFila ? '<td>' + tempoFilaBadge(i.updated) + '</td>' : '') +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + fmtDate(i.updated) + '</td>' +
       '</tr>';
   }).join('');
@@ -747,7 +768,9 @@ function renderResults(data, userKey) {
 
   var unassigned = data.unassigned || [];
   var assigned   = data.assigned   || [];
-  var userName   = (selectedUser && selectedUser.displayName) || userKey || null;
+  var userName   = selectedUsers.length
+    ? selectedUsers.map(function(u) { return u.displayName; }).join(', ')
+    : null;
 
   document.getElementById('chip-total').textContent      = data.total || (unassigned.length + assigned.length);
   document.getElementById('chip-unassigned').textContent = data.totalUnassigned != null ? data.totalUnassigned : unassigned.length;
@@ -767,7 +790,7 @@ function renderResults(data, userKey) {
   document.getElementById('results').innerHTML = incompleto +
     '<div class="section">' +
       '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
-      renderTable(unassigned, 'tbl-unassigned') +
+      renderTable(unassigned, 'tbl-unassigned', true) +
     '</div>' +
     '<div class="section">' +
       '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + escHtml(userName) : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
@@ -801,10 +824,10 @@ function pedirPermissaoNotificacao() {
 }
 
 function enviarBoasVindas() {
-  var user = document.getElementById('inp-user').value.trim();
+  var nomes = selectedUsers.map(function(u) { return u.displayName; });
   var corpo = 'Você será notificado sobre:\n'
     + '• Novos chamados sem responsável\n'
-    + (user ? '• Atualizações nos chamados de ' + user : '• Atualizações nos chamados atribuídos');
+    + (nomes.length ? '• Atualizações nos chamados de ' + nomes.join(', ') : '• Atualizações nos chamados atribuídos');
   notificar('✅ Alertas ativados — Chamados por Vertical', corpo, 'boas-vindas');
 }
 
@@ -825,6 +848,94 @@ function notificar(titulo, corpo, tag) {
   } else {
     new Notification(titulo, { body: corpo, tag: tag });
   }
+}
+
+// ── MULTI-USER TAGS ──────────────────────────────────────────────────────────
+function adicionarUserTag(u) {
+  if (selectedUsers.some(function(x) { return x.name === u.name; })) return; // evita duplicata
+  selectedUsers.push(u);
+  renderUserTags();
+}
+
+function removerUserTag(name) {
+  selectedUsers = selectedUsers.filter(function(u) { return u.name !== name; });
+  renderUserTags();
+  if (buscaAtiva) buscar();
+}
+
+function renderUserTags() {
+  var container = document.getElementById('user-tags');
+  container.innerHTML = '';
+  selectedUsers.forEach(function(u) {
+    var tag = document.createElement('span');
+    tag.className = 'user-tag';
+    tag.innerHTML = escHtml(u.displayName) +
+      '<span class="tag-x" onclick="removerUserTag(\'' + escHtml(u.name) + '\')" title="Remover">×</span>';
+    container.appendChild(tag);
+  });
+  // Placeholder dinâmico
+  document.getElementById('inp-user').placeholder = selectedUsers.length ? 'Adicionar...' : 'Adicionar responsável...';
+}
+
+// ── FILTROS PERSISTENTES ──────────────────────────────────────────────────────
+function salvarFiltros() {
+  try {
+    localStorage.setItem('filtros_v2', JSON.stringify({
+      portfolio: document.getElementById('sel-portfolio').value,
+      vertical:  document.getElementById('sel-vertical').value,
+      days:      document.getElementById('sel-days').value,
+      tipos:     [...tiposSelected],
+      users:     selectedUsers,
+    }));
+  } catch(e) {}
+}
+
+function restaurarFiltros() {
+  try {
+    var saved = localStorage.getItem('filtros_v2');
+    if (!saved) return;
+    var f = JSON.parse(saved);
+    if (f.portfolio) document.getElementById('sel-portfolio').value = f.portfolio;
+    if (f.vertical)  document.getElementById('sel-vertical').value  = f.vertical;
+    if (f.days)      document.getElementById('sel-days').value      = f.days;
+    if (f.users && f.users.length) {
+      f.users.forEach(function(u) { adicionarUserTag(u); });
+    }
+    if (f.tipos && f.tipos.length) pendingTiposRestore = f.tipos;
+  } catch(e) {}
+}
+restaurarFiltros();
+
+// ── BADGE NO TÍTULO DA ABA ────────────────────────────────────────────────────
+function atualizarBadgeTitulo(delta) {
+  pendingCount = Math.max(0, pendingCount + (delta || 0));
+  document.title = pendingCount > 0
+    ? '(' + pendingCount + ') Chamados por Vertical — Betha Sistemas'
+    : 'Chamados por Vertical — Betha Sistemas';
+}
+
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) {
+    pendingCount = 0;
+    document.title = 'Chamados por Vertical — Betha Sistemas';
+  }
+});
+
+// ── TEMPO NA FILA ─────────────────────────────────────────────────────────────
+function tempoRelativo(iso) {
+  if (!iso) return '';
+  var diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60)    return 'agora';
+  if (diff < 3600)  return Math.floor(diff / 60) + 'min';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+  return Math.floor(diff / 86400) + 'd';
+}
+
+function tempoFilaBadge(iso) {
+  if (!iso) return '';
+  var horas = (Date.now() - new Date(iso).getTime()) / 3600000;
+  var cls   = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
+  return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
 }
 
 // ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
@@ -911,6 +1022,7 @@ function detectarNovidades(data) {
       ? novosUnassigned[0].summary
       : novosUnassigned.map(function(i) { return '• ' + i.key + ' — ' + i.summary.slice(0, 55); }).join('\n');
     notificar(tituloU, corpoU, 'unassigned');
+    atualizarBadgeTitulo(novosUnassigned.length);
     var labelU = novosUnassigned.length === 1
       ? '1 novo chamado sem responsável: <strong>' + escHtml(novosUnassigned[0].key) + '</strong> — ' + escHtml(novosUnassigned[0].summary.slice(0, 60))
       : novosUnassigned.length + ' novos chamados sem responsável detectados';
@@ -925,6 +1037,7 @@ function detectarNovidades(data) {
       ? statusAlterado[0].summary + '\n' + statusAlterado[0].prevStatus + ' → ' + statusAlterado[0].status
       : statusAlterado.map(function(i) { return '• ' + i.key + ': ' + i.prevStatus + ' → ' + i.status; }).join('\n');
     notificar(tituloS, corpoS, 'status');
+    atualizarBadgeTitulo(statusAlterado.length);
     var labelS = statusAlterado.length === 1
       ? 'Status alterado em <strong>' + escHtml(statusAlterado[0].key) + '</strong>: ' + escHtml(statusAlterado[0].prevStatus) + ' → ' + escHtml(statusAlterado[0].status)
       : statusAlterado.length + ' chamados com status alterado';
@@ -939,6 +1052,7 @@ function detectarNovidades(data) {
       ? movimentados[0].summary
       : movimentados.map(function(i) { return '• ' + i.key + ' — ' + i.summary.slice(0, 55); }).join('\n');
     notificar(tituloM, corpoM, 'movimentacao');
+    atualizarBadgeTitulo(movimentados.length);
     var labelM = movimentados.length === 1
       ? 'Movimentação em <strong>' + escHtml(movimentados[0].key) + '</strong> — ' + escHtml(movimentados[0].summary.slice(0, 60))
       : movimentados.length + ' chamados com movimentação recente';

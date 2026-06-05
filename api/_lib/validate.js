@@ -130,11 +130,27 @@ class ValidationError extends Error {
   }
 }
 
+/**
+ * Valida e sanitiza uma lista de usuários (suporte a múltiplos responsáveis).
+ * @param {string|undefined} usersParam - CSV ex: "joao.silva,maria.costa"
+ * @returns {string[]} Lista de usernames escapados, ou array vazio
+ */
+function validateUsers(usersParam) {
+  if (!usersParam || !usersParam.trim()) return [];
+  return usersParam.split(',')
+    .map(u => u.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .filter(u => u.length <= 200)
+    .map(u => escapeJqlValue(u));
+}
+
 module.exports = {
   validateSearchParams,
   validateUserQuery,
   validateTypes,
   validateDays,
+  validateUsers,
   ValidationError,
   TIPOS_PERMITIDOS,
   VERTICAIS_VALIDAS,
