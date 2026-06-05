@@ -332,13 +332,21 @@ function fetchUsuarios(q) {
   fetch('/api/usuarios?q=' + encodeURIComponent(q))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      // Deduplica por name (API do Jira pode retornar duplicatas) e remove já selecionados
-      var seen = {};
+      // Deduplica por name E por email (Jira cria 2 registros: username e email-como-username)
+      // e remove já selecionados (comparando por name ou email)
+      var seenNames  = {};
+      var seenEmails = {};
       var users = (data.users || []).filter(function(u) {
-        var key = (u.name || '').toLowerCase();
-        if (seen[key]) return false;
-        seen[key] = true;
-        return !selectedUsers.some(function(s) { return (s.name || '').toLowerCase() === key; });
+        var nameKey  = (u.name  || '').toLowerCase();
+        var emailKey = (u.email || '').toLowerCase();
+        if (seenNames[nameKey])              return false;
+        if (emailKey && seenEmails[emailKey]) return false;
+        seenNames[nameKey] = true;
+        if (emailKey) seenEmails[emailKey] = true;
+        return !selectedUsers.some(function(s) {
+          return (s.name  || '').toLowerCase() === nameKey ||
+                 (emailKey && (s.email || '').toLowerCase() === emailKey);
+        });
       });
       acList.innerHTML = '';
       if (!users.length) { acList.classList.remove('open'); return; }
