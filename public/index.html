@@ -285,7 +285,11 @@ fetch('/api/tipos')
     setBadge(data.ok);
     if (data.ok && data.tipos) initTipos(data.tipos);
   })
-  .catch(function() { setBadge(false); });
+  .catch(function() {
+    setBadge(false);
+    // Se /api/tipos falhar, ainda dispara a busca automática pendente
+    if (pendingAutoSearch) { pendingAutoSearch = false; buscar(); }
+  });
 
 // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
 inpUser.addEventListener('input', function() {
@@ -756,8 +760,8 @@ function renderTable(issues, tableId, showTempoFila) {
       '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
-      '<td>' + statusPill(i.status) + '</td>' +
       (!showTempoFila ? '<td style="font-size:12px;white-space:nowrap">' + escHtml(i.assignee || '—') + '</td>' : '') +
+      '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
       (showTempoFila ? '<td>' + tempoFilaBadge(i.updated) + '</td>' : '') +
