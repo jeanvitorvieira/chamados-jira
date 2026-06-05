@@ -45,9 +45,9 @@ module.exports = async function handler(req, res) {
     if (err instanceof ConfigError) {
       return res.status(500).json({ ok: false, error: 'Serviço não configurado.', code: 'CONFIG_ERROR' });
     }
-    if (err instanceof JiraError) {
-      return res.status(502).json({ ok: false, error: 'Erro ao consultar o Jira.', code: 'JIRA_ERROR' });
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ ok: false, error: 'Timeout.', code: 'TIMEOUT' });
     }
-    throw err;
+    return res.status(502).json({ ok: false, error: 'Erro ao consultar o Jira.', code: 'JIRA_ERROR' });
   }
 };

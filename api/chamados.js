@@ -97,7 +97,13 @@ module.exports = async function handler(req, res) {
       }
       return res.status(502).json({ ok: false, error: 'Não foi possível conectar ao Jira. Tente novamente.', code: 'JIRA_ERROR' });
     }
-    throw err;
+    // AbortError (timeout) ou qualquer outro erro inesperado — sempre retorna JSON
+    if (err.name === 'AbortError') {
+      console.error('[chamados] Timeout na consulta ao Jira');
+      return res.status(504).json({ ok: false, error: 'Consulta ao Jira excedeu o tempo limite. Tente novamente.', code: 'TIMEOUT' });
+    }
+    console.error('[chamados] Erro inesperado:', err);
+    return res.status(500).json({ ok: false, error: 'Erro interno. Tente novamente.', code: 'INTERNAL_ERROR' });
   }
 };
 
