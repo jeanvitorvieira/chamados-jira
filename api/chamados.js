@@ -110,10 +110,6 @@ module.exports = async function handler(req, res) {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 /**
- * Constrói a expressão JQL a partir dos parâmetros validados.
- * Os valores já chegam escapados de validate.js.
- */
-/**
  * Constrói JQL para uma das duas queries independentes.
  * Prefere filtrar por ID numérico (typeIds) para cobrir tipos homônimos;
  * cai no filtro por nome (types) como fallback.

@@ -47,7 +47,7 @@ function getConfig() {
 async function request(path, options = {}) {
   const { url, authHeader } = getConfig();
 
-  // Timeout explícito de 8s via AbortController — compatível com Node 16+.
+  // Timeout explícito de 15s via AbortController — compatível com Node 16+.
   const controller = new AbortController();
   const timeoutId  = setTimeout(() => controller.abort(), 15000);
 
