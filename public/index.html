@@ -351,10 +351,8 @@ function fetchUsuarios(q) {
       });
       acList.classList.add('open');
     })
-    .finally(function() {
-      inpUser.style.backgroundImage = '';
-    })
-    .catch(function() { acList.classList.remove('open'); });
+    .catch(function() { acList.classList.remove('open'); })
+    .finally(function() { inpUser.style.backgroundImage = ''; });
 }
 
 // ── MULTI-SELECT TIPOS ───────────────────────────────────────────────────────
@@ -422,12 +420,20 @@ function filtrarTipos(q) {
 
 function selecionarTodosTipos() {
   tiposSelected.clear();
-  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) {
+    cb.checked = true;
+    tiposSelected.add(cb.value);
+  });
   atualizarTipoLabel();
   if (buscaAtiva) buscar();
 }
 
-function limparTipos() { selecionarTodosTipos(); }
+function limparTipos() {
+  tiposSelected.clear();
+  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+  atualizarTipoLabel();
+  if (buscaAtiva) buscar();
+}
 
 function atualizarTipoLabel() {
   var label = document.getElementById('tipo-label');
@@ -475,6 +481,8 @@ function buscar(silencioso) {
         'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
         '</div>';
       document.getElementById('chips').style.display = 'none';
+    } else if (buscaAtiva) {
+      agendarProximoRefresh(); // mantém polling vivo mesmo retornando cedo
     }
     return;
   }
@@ -488,6 +496,8 @@ function buscar(silencioso) {
         'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
         '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
       document.getElementById('chips').style.display = 'none';
+    } else if (buscaAtiva) {
+      agendarProximoRefresh(); // mantém polling vivo mesmo retornando cedo
     }
     return;
   }
@@ -509,7 +519,7 @@ function buscar(silencioso) {
     document.getElementById('results').innerHTML =
       '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
     pararPolling();
-    document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+    limparBanners();
   }
 
   fetch('/api/chamados?' + params.toString())
@@ -520,8 +530,8 @@ function buscar(silencioso) {
       renderResults(data, user);
 
       if (silencioso) {
-        // Só no refresh automático: compara com baseline e exibe banner se houver novidades
-        document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+        // Só no refresh automático: compara com baseline e exibe banners se houver novidades
+        limparBanners();
         detectarNovidades(data);
       }
 
@@ -579,7 +589,7 @@ var STATUS_COLOR = {
 };
 
 function statusPill(s) {
-  return '<span class="status-pill" style="background:' + (STATUS_BG[s] || '#F3F4F6') + ';color:' + (STATUS_COLOR[s] || '#5A6680') + '">' + s + '</span>';
+  return '<span class="status-pill" style="background:' + (STATUS_BG[s] || '#F3F4F6') + ';color:' + (STATUS_COLOR[s] || '#5A6680') + '">' + escHtml(s) + '</span>';
 }
 
 function priBadge(p) {
@@ -607,12 +617,16 @@ var sortState = { col: null, dir: 'asc' };
 
 var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'status', 'priority', 'type', 'updated'];
 
+var PRIORITY_ORDER = { 'Highest': 1, 'High': 2, 'Medium': 3, 'Low': 4, 'Lowest': 5 };
+
 function sortIssues(issues, col, dir) {
   return issues.slice().sort(function(a, b) {
     var va = a[col] || '';
     var vb = b[col] || '';
-    // Prioridade: comparação numérica
-    if (col === 'priority') { va = parseInt(va) || 99; vb = parseInt(vb) || 99; }
+    if (col === 'priority') {
+      va = PRIORITY_ORDER[va] || 99;
+      vb = PRIORITY_ORDER[vb] || 99;
+    }
     var cmp = va < vb ? -1 : va > vb ? 1 : 0;
     return dir === 'asc' ? cmp : -cmp;
   });
@@ -855,15 +869,18 @@ function detectarNovidades(data) {
   }
 }
 
+function limparBanners() {
+  document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
+}
+
 function exibirBanner(html, tipo) {
   var isWarning = tipo === 'warning';
-  document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
   var banner = document.createElement('div');
   banner.className = 'new-issues-banner';
   if (!isWarning) {
-    banner.style.background   = 'var(--blue-light)';
-    banner.style.borderColor  = 'var(--blue-mid)';
-    banner.style.color        = 'var(--blue-primary)';
+    banner.style.background  = 'var(--blue-light)';
+    banner.style.borderColor = 'var(--blue-mid)';
+    banner.style.color       = 'var(--blue-primary)';
   }
   banner.innerHTML = html +
     ' <button onclick="buscar()" style="margin-left:auto;background:' + (isWarning ? 'var(--orange)' : 'var(--blue-mid)') + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
