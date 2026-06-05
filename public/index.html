@@ -266,10 +266,13 @@ function setBadge(online) {
   badge.textContent = online ? 'Online' : 'Offline';
   badge.style.background = online ? '#00C851' : '#e53935';
 }
-// Health-check leve: usa /api/tipos (sem parâmetros, resposta cacheada 1h)
-// Evita bater no Jira a cada abertura de página com uma query real
+// Fetch único: health-check do badge + população do dropdown de tipos
 fetch('/api/tipos')
-  .then(function(r) { setBadge(r.ok); })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    setBadge(data.ok);
+    if (data.ok && data.tipos) initTipos(data.tipos);
+  })
   .catch(function() { setBadge(false); });
 
 // ── AUTOCOMPLETE ─────────────────────────────────────────────────────────────
@@ -359,41 +362,88 @@ function fetchUsuarios(q) {
 var tiposSelected = new Set(); // Set de IDs numéricos selecionados
 var tiposNomeMap  = {};        // { "1,10015": "Incidente", ... } para exibição
 
+// Tipos priorizados: aparecem no topo e vêm pré-selecionados
+var TIPOS_PRIORITARIOS = [
+  'Acompanhamento técnico',
+  'Capacitação',
+  'Configuração',
+  'Customização',
+  'Dúvida',
+  'Incidente',
+  'Tratamento de dados',
+  'Treinamento',
+];
+
 function initTipos(tipos) {
   var container = document.getElementById('tipo-items');
   container.innerHTML = '';
   tiposNomeMap = {};
+  tiposSelected.clear();
+
+  // Ordena: prioritários primeiro (na ordem definida), resto em seguida alfabeticamente
+  var prioritarios = [];
+  var restantes    = [];
   tipos.forEach(function(tipo) {
-    // tipo = { name: "Incidente", ids: ["1", "10015"] }
+    var name = typeof tipo === 'string' ? tipo : tipo.name;
+    if (TIPOS_PRIORITARIOS.indexOf(name) >= 0) prioritarios.push(tipo);
+    else restantes.push(tipo);
+  });
+  prioritarios.sort(function(a, b) {
+    var na = typeof a === 'string' ? a : a.name;
+    var nb = typeof b === 'string' ? b : b.name;
+    return TIPOS_PRIORITARIOS.indexOf(na) - TIPOS_PRIORITARIOS.indexOf(nb);
+  });
+  restantes.sort(function(a, b) {
+    var na = typeof a === 'string' ? a : a.name;
+    var nb = typeof b === 'string' ? b : b.name;
+    return na.localeCompare(nb, 'pt-BR');
+  });
+  var ordenados = prioritarios.concat(restantes);
+
+  // Separador visual entre prioritários e restantes
+  var haRestantes = restantes.length > 0;
+
+  ordenados.forEach(function(tipo, idx) {
     var name = typeof tipo === 'string' ? tipo : tipo.name;
     var ids  = typeof tipo === 'string' ? [tipo] : (tipo.ids || [String(tipo.name)]);
     var key  = ids.join(',');
+    var isPrioritario = TIPOS_PRIORITARIOS.indexOf(name) >= 0;
     tiposNomeMap[key] = name;
+
+    // Separador antes do primeiro tipo não-prioritário
+    if (haRestantes && idx === prioritarios.length) {
+      var sep = document.createElement('div');
+      sep.style.cssText = 'border-top:1px solid var(--gray-border);margin:4px 0;';
+      container.appendChild(sep);
+    }
 
     var label = document.createElement('label');
     label.className = 'multiselect-item';
     var cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.value = key;
+
+    // Pré-seleciona os tipos prioritários
+    if (isPrioritario) {
+      cb.checked = true;
+      tiposSelected.add(key);
+    }
+
     cb.addEventListener('change', function() {
       if (cb.checked) tiposSelected.add(key);
       else tiposSelected.delete(key);
       atualizarTipoLabel();
-      if (buscaAtiva) buscar(); // auto-search ao alterar tipo (só após primeira busca)
+      if (buscaAtiva) buscar();
     });
     label.appendChild(cb);
     label.appendChild(document.createTextNode(name));
     container.appendChild(label);
   });
+
+  atualizarTipoLabel();
 }
 
-// Carrega tipos do Jira ao inicializar
-fetch('/api/tipos')
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.ok && data.tipos) initTipos(data.tipos);
-  })
-  .catch(function() { /* falha silenciosa — dropdown fica vazio */ });
+
 
 function toggleTipoDropdown() {
   var btn = document.getElementById('tipo-btn');
@@ -420,9 +470,11 @@ function filtrarTipos(q) {
 
 function selecionarTodosTipos() {
   tiposSelected.clear();
-  document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) {
-    cb.checked = true;
-    tiposSelected.add(cb.value);
+  // Seleciona apenas os itens visíveis (considera filtro de pesquisa ativo)
+  document.querySelectorAll('#tipo-items .multiselect-item').forEach(function(item) {
+    if (item.style.display === 'none') return;
+    var cb = item.querySelector('input[type=checkbox]');
+    if (cb) { cb.checked = true; tiposSelected.add(cb.value); }
   });
   atualizarTipoLabel();
   if (buscaAtiva) buscar();
@@ -832,6 +884,14 @@ function detectarNovidades(data) {
     return prev && prev.status === i.status && prev.updated !== i.updated;
   });
 
+  // Tickets atribuídos que sumiram dos resultados — verifica via API se foram encerrados
+  // Guarda: só verifica se os resultados não estão truncados (evita falso positivo com >100 atribuídos)
+  var currentKeys = new Set(all.map(function(i) { return i.key; }));
+  var resultadosTruncados = data.totalAssigned > assigned.length;
+  var desaparecidos = resultadosTruncados ? [] : Object.keys(knownIssues).filter(function(key) {
+    return !currentKeys.has(key) && knownIssues[key].assignee !== null;
+  });
+
   if (novosUnassigned.length > 0) {
     var tituloU = novosUnassigned.length === 1
       ? '⚠️ Novo chamado sem responsável: ' + novosUnassigned[0].key
@@ -873,34 +933,33 @@ function detectarNovidades(data) {
       : movimentados.length + ' chamados com movimentação recente';
     exibirBanner('📋 ' + labelM, 'info');
   }
+
+  if (desaparecidos.length > 0) {
+    fetch('/api/issues?keys=' + desaparecidos.join(','))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) return;
+        var encerrados = data.issues.filter(function(i) { return i.statusCat === 'done'; });
+        if (!encerrados.length) return;
+        var tituloR = encerrados.length === 1
+          ? '✅ Chamado encerrado: ' + encerrados[0].key
+          : '✅ ' + encerrados.length + ' chamados encerrados';
+        var corpoR = encerrados.length === 1
+          ? 'Status: ' + encerrados[0].status
+          : encerrados.map(function(i) { return '• ' + i.key + ' — ' + i.status; }).join('\n');
+        notificar(tituloR, corpoR, 'resolvidos');
+        var labelR = encerrados.length === 1
+          ? 'Chamado <strong>' + escHtml(encerrados[0].key) + '</strong> encerrado — ' + escHtml(encerrados[0].status)
+          : encerrados.length + ' chamados encerrados';
+        exibirBanner('✅ ' + labelR, 'success');
+      })
+      .catch(function() {});
+  }
 }
 
 function limparBanners() {
   document.querySelectorAll('.new-issues-banner').forEach(function(el) { el.remove(); });
 }
 
-function exibirBanner(html, tipo) {
-  var isWarning = tipo === 'warning';
-  var banner = document.createElement('div');
-  banner.className = 'new-issues-banner';
-  if (!isWarning) {
-    banner.style.background  = 'var(--blue-light)';
-    banner.style.borderColor = 'var(--blue-mid)';
-    banner.style.color       = 'var(--blue-primary)';
-  }
-  banner.innerHTML = html +
-    ' <button onclick="buscar()" style="margin-left:auto;background:' + (isWarning ? 'var(--orange)' : 'var(--blue-mid)') + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
-  document.getElementById('results').insertAdjacentElement('beforebegin', banner);
-}
-
-var toastTimer;
-function showToast(msg) {
-  var t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
-}
-</script>
-</body>
-</html>
+var BANNER_STYLES = {
+  warning: { bg: 'var(--
