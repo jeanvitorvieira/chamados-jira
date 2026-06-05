@@ -331,7 +331,13 @@ function fetchUsuarios(q) {
   fetch('/api/usuarios?q=' + encodeURIComponent(q))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      var users = data.users || [];
+      // Deduplica por name (API do Jira pode retornar duplicatas) e remove já selecionados
+      var seen = {};
+      var users = (data.users || []).filter(function(u) {
+        if (seen[u.name]) return false;
+        seen[u.name] = true;
+        return !selectedUsers.some(function(s) { return s.name === u.name; });
+      });
       acList.innerHTML = '';
       if (!users.length) { acList.classList.remove('open'); return; }
       users.forEach(function(u) {
@@ -693,7 +699,7 @@ function fmtDate(iso) {
 // Estado de ordenação atual
 var sortState = { col: null, dir: 'asc' };
 
-var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'status', 'priority', 'type', 'updated'];
+var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'assignee', 'status', 'priority', 'type', 'updated'];
 
 var PRIORITY_ORDER = { 'Highest': 1, 'High': 2, 'Medium': 3, 'Low': 4, 'Lowest': 5 };
 
@@ -717,10 +723,10 @@ function renderTable(issues, tableId, showTempoFila) {
 
   var headers = showTempoFila
     ? ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Na fila','Atualizado']
-    : ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Atualizado'];
+    : ['Chamado','Resumo','Portfólio','Vertical','Responsável','Status','Prior.','Tipo','Atualizado'];
   var sortKeysLocal = showTempoFila
     ? ['key','summary','portfolio','vertical','status','priority','type','updated','updated']
-    : SORT_KEYS;
+    : ['key','summary','portfolio','vertical','assignee','status','priority','type','updated'];
   var ths = headers.map(function(h, idx) {
     var col = sortKeysLocal[idx];
     var cls = 'sortable' + (sortState.col === col ? (' sort-' + sortState.dir) : '');
@@ -735,6 +741,7 @@ function renderTable(issues, tableId, showTempoFila) {
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
       '<td>' + statusPill(i.status) + '</td>' +
+      (!showTempoFila ? '<td style="font-size:12px;white-space:nowrap">' + escHtml(i.assignee || '—') + '</td>' : '') +
       '<td>' + priBadge(i.priority) + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
       (showTempoFila ? '<td>' + tempoFilaBadge(i.updated) + '</td>' : '') +
