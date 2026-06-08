@@ -1,4 +1,4 @@
-# 📋 Chamados por Vertical — Betha Sistemas
+# 📋 Chamados por Vertical
 
 Painel web para consulta e monitoramento em tempo real de chamados abertos no Jira de Atendimento, com filtros combinados, múltiplos responsáveis, polling automático e notificações nativas do sistema operacional.
 
@@ -29,13 +29,13 @@ O sistema resolve um problema recorrente de atendimento: identificar rapidamente
 - Busca automática ao alterar qualquer filtro (sem botão "Buscar")
 - Autocomplete de usuários integrado ao Jira, com deduplicação por e-mail (cobre contas duplicadas no Jira)
 - Múltiplos responsáveis simultâneos — cada chamado exibe o nome do seu dono na tabela
-- Tabela de "Sem responsável" com indicador de tempo na fila (badge colorido por urgência)
-- Tabela de "Atribuídos" com coluna de responsável e ordenação por qualquer coluna
+- Tabela "Sem responsável" com indicador de tempo na fila (badge colorido por urgência)
+- Tabela "Atribuídos" com coluna de responsável e ordenação por qualquer coluna
 - Polling automático a cada 60 segundos com barra de progresso visual
-- Notificações nativas do SO (canto da tela) ao detectar novidades no ciclo de polling:
+- Notificações nativas do SO (canto da tela) mesmo com a aba em segundo plano:
   - Novo chamado sem responsável
   - Mudança de status em chamado atribuído
-  - Movimentação (updated alterado com status igual)
+  - Movimentação (campo `updated` alterado com status igual)
   - Chamado atribuído encerrado
 - Filtros persistidos via `localStorage` e restaurados com busca automática ao recarregar
 - Badge no título da aba com contador de novidades não vistas
@@ -56,8 +56,8 @@ chamados-jira/
 │   └── usuarios.js          # GET /api/usuarios — autocomplete de usuários
 ├── public/
 │   ├── index.html           # Frontend SPA (HTML/CSS/JS puro, sem framework, sem build)
-│   └── sw.js                # Service Worker — exibe notificações nativas via browser
-├── test_chamados.js         # Suite de 47 testes mockados (Node.js, sem dependências)
+│   └── sw.js                # Service Worker — polling em background + notificações nativas
+├── test_chamados.js         # Suite de 32 testes mockados (Node.js, sem dependências)
 ├── package.json
 ├── vercel.json              # Configuração de deploy e headers de segurança
 └── README.md
@@ -70,14 +70,14 @@ Browser
   │
   ├─ GET /api/tipos  (on load — popula multiselect, dispara busca se filtros restaurados)
   │
-  ├─ GET /api/chamados?vertical=X&portfolio=Y&users=a,b&typeIds=10001,10002&days=30
+  ├─ GET /api/chamados?vertical=X&portfolio=Y&users=usuario1,usuario2&typeIds=10001&days=30
   │     └─→ validate.js     (valida vertical/portfolio contra lista fechada, escapa users)
   │     └─→ buildJql()      (monta 2 JQLs: unassigned + assigned, em paralelo)
   │     └─→ jira.js         (autentica, timeout 15s, normaliza erros HTTP)
   │     └─→ mapIssue()      (DTO limpo: key, summary, status, assignee, priority…)
   │     ← JSON { ok, total, unassigned[], assigned[], totalUnassigned, totalAssigned }
   │
-  ├─ GET /api/usuarios?q=jean  (autocomplete com debounce 300ms)
+  ├─ GET /api/usuarios?q=termo  (autocomplete com debounce 300ms)
   │
   └─ GET /api/issues?keys=X-1,X-2  (polling: verifica se tickets sumiram e foram encerrados)
 ```
@@ -90,7 +90,7 @@ Browser
 
 **Dois JQLs paralelos:** a busca de chamados executa duas queries independentes em `Promise.all` — uma para sem responsável, outra para os atribuídos — evitando lógica de OR no JQL e permitindo contagens separadas.
 
-**Polling no frontend (não SW):** o polling de 60s roda no thread principal da página para ter acesso direto ao DOM (barra de progresso, banners). O Service Worker é usado exclusivamente para exibir notificações nativas, que funcionam mesmo com a aba minimizada.
+**Polling híbrido (página + Service Worker):** quando a aba está visível, o polling de 60s roda no thread principal (acesso direto ao DOM — barra de progresso, banners). Quando a aba vai para segundo plano, a página passa o bastão ao Service Worker via `START_POLLING`; o SW roda em thread separada, não é throttlado pelo browser, e dispara notificações nativas do SO via `showNotification()`. Ao retornar ao foco, a página envia `STOP_POLLING` e retoma o controle.
 
 ---
 
@@ -99,7 +99,7 @@ Browser
 - Conta gratuita no [Vercel](https://vercel.com) (login com GitHub, GitLab ou Bitbucket)
 - Repositório Git (GitHub recomendado)
 - Credenciais de acesso à API do Jira Server:
-  - URL base da instância (ex: `https://atendimento.betha.com.br`)
+  - URL base da instância (ex: `https://jira.empresa.com.br`)
   - Usuário de serviço dedicado e sua senha
 - Node.js 18+ (apenas para desenvolvimento local e testes)
 
@@ -109,11 +109,11 @@ Browser
 
 ## Variáveis de ambiente
 
-| Variável        | Obrigatória | Descrição                                    | Exemplo                            |
-|-----------------|-------------|----------------------------------------------|------------------------------------|
-| `JIRA_URL`      | ✅          | URL base da instância Jira (sem barra final) | `https://atendimento.betha.com.br` |
-| `JIRA_USER`     | ✅          | Username do usuário de serviço no Jira       | `mcpintegracao`                    |
-| `JIRA_PASSWORD` | ✅          | Senha do usuário de serviço                  | `*****`                            |
+| Variável        | Obrigatória | Descrição                                    | Exemplo                      |
+|-----------------|-------------|----------------------------------------------|------------------------------|
+| `JIRA_URL`      | ✅          | URL base da instância Jira (sem barra final) | `https://jira.empresa.com.br`|
+| `JIRA_USER`     | ✅          | Username do usuário de serviço no Jira       | `usuario-servico`            |
+| `JIRA_PASSWORD` | ✅          | Senha do usuário de serviço                  | `*****`                      |
 
 As variáveis são lidas em runtime pelas serverless functions e **nunca chegam ao browser**.
 
@@ -169,7 +169,7 @@ npm run dev
 Crie o arquivo `.env.example` com:
 
 ```
-JIRA_URL=https://atendimento.betha.com.br
+JIRA_URL=https://jira.empresa.com.br
 JIRA_USER=
 JIRA_PASSWORD=
 ```
@@ -184,40 +184,54 @@ Retorna issues abertas filtradas pelos parâmetros informados, separadas em dois
 
 **Parâmetros de query:**
 
-| Parâmetro  | Tipo   | Obrigatório | Descrição                                                          |
-|------------|--------|-------------|--------------------------------------------------------------------|
-| `vertical` | string | Não         | Nome da vertical (deve estar na lista válida em `validate.js`)     |
-| `portfolio`| string | Não         | Nome do portfólio (deve estar na lista válida em `validate.js`)    |
-| `users`    | string | Não         | CSV de usernames do Jira (ex: `jean.vieira,marlon.ern`), máx. 10  |
-| `typeIds`  | string | Não         | CSV de IDs numéricos de tipo de issue (ex: `10001,10002`)          |
-| `days`     | number | Não         | Período em dias: `0` (qualquer data), `30`, `60` ou `90`           |
+| Parâmetro  | Tipo   | Obrigatório | Descrição                                                               |
+|------------|--------|-------------|-------------------------------------------------------------------------|
+| `vertical` | string | Não         | Nome da vertical (deve estar na lista válida em `validate.js`)          |
+| `portfolio`| string | Não         | Nome do portfólio (deve estar na lista válida em `validate.js`)         |
+| `users`    | string | Não         | CSV de usernames do Jira (ex: `usuario1,usuario2`), máx. 10            |
+| `typeIds`  | string | Não         | CSV de IDs numéricos de tipo de issue (ex: `10001,10002`)               |
+| `days`     | number | Não         | Período em dias: `0` (qualquer data), `30`, `60` ou `90`                |
 
-Se `users` for omitido, a seção `assigned` retorna vazia. Pelo menos 2 parâmetros preenchidos são exigidos pelo frontend antes de disparar a requisição.
+Se `users` for omitido, a seção `assigned` retorna vazia. O frontend exige pelo menos 2 parâmetros preenchidos antes de disparar a requisição.
 
 **Resposta de sucesso (200):**
 
 ```json
 {
   "ok": true,
-  "total": 51,
-  "totalUnassigned": 8,
-  "totalAssigned": 43,
+  "total": 12,
+  "totalUnassigned": 4,
+  "totalAssigned": 8,
   "unassigned": [
     {
-      "key": "BTHSC-321508",
-      "summary": "Empenho: Não é permitido número duplicado",
+      "key": "PROJ-1001",
+      "summary": "Descrição do chamado sem responsável",
       "status": "Aguardando Manutenção",
       "priority": "High",
       "type": "Incidente",
       "assignee": null,
-      "updated": "2026-06-02T08:04:49.000-0300",
-      "created": "2026-06-01T11:55:53.000-0300",
+      "updated": "2026-06-01T10:00:00.000-0300",
+      "created": "2026-05-30T08:00:00.000-0300",
       "vertical": "Contábil",
       "portfolio": "Portfólio Pequenas Contas",
-      "url": "https://atendimento.betha.com.br/browse/BTHSC-321508"
+      "url": "https://jira.empresa.com.br/browse/PROJ-1001"
     }
   ],
-  "assigned": [ /* mesma estrutura, com assignee preenchido */ ]
+  "assigned": [
+    {
+      "key": "PROJ-1002",
+      "summary": "Descrição do chamado atribuído",
+      "status": "Em andamento",
+      "priority": "Medium",
+      "type": "Dúvida",
+      "assignee": "Usuário 1",
+      "updated": "2026-06-02T09:00:00.000-0300",
+      "created": "2026-05-28T14:00:00.000-0300",
+      "vertical": "Contábil",
+      "portfolio": "Portfólio Pequenas Contas",
+      "url": "https://jira.empresa.com.br/browse/PROJ-1002"
+    }
+  ]
 }
 ```
 
@@ -271,9 +285,9 @@ Busca usuários no Jira por nome ou e-mail. Usado pelo autocomplete do frontend 
   "ok": true,
   "users": [
     {
-      "name": "jean.vieira",
-      "displayName": "Jean Vitor Vieira",
-      "email": "jean.vieira@betha.com.br"
+      "name": "usuario1",
+      "displayName": "Usuário 1",
+      "email": "usuario1@empresa.com.br"
     }
   ]
 }
@@ -287,9 +301,9 @@ Verifica o status atual de tickets específicos por chave. Usado pelo polling pa
 
 **Parâmetros de query:**
 
-| Parâmetro | Tipo   | Obrigatório | Descrição                                  |
-|-----------|--------|-------------|--------------------------------------------|
-| `keys`    | string | Sim         | CSV de chaves Jira (ex: `X-1,X-2`), máx. 20 |
+| Parâmetro | Tipo   | Obrigatório | Descrição                                    |
+|-----------|--------|-------------|----------------------------------------------|
+| `keys`    | string | Sim         | CSV de chaves Jira (ex: `PROJ-1,PROJ-2`), máx. 20 |
 
 **Resposta de sucesso (200):**
 
@@ -298,10 +312,10 @@ Verifica o status atual de tickets específicos por chave. Usado pelo polling pa
   "ok": true,
   "issues": [
     {
-      "key": "BTHSC-321508",
+      "key": "PROJ-1001",
       "status": "Resolvido",
       "statusCat": "done",
-      "assignee": "Jean Vitor Vieira"
+      "assignee": "Usuário 1"
     }
   ]
 }
@@ -341,7 +355,7 @@ Todo dado externo (sumário, nome de usuário, status) é escapado via `escHtml(
 
 ## Testes
 
-O projeto inclui uma suite de 47 testes mockados em `test_chamados.js`, sem dependências externas:
+O projeto inclui uma suite de 32 testes mockados em `test_chamados.js`, sem dependências externas:
 
 ```bash
 node test_chamados.js
@@ -350,12 +364,13 @@ node test_chamados.js
 Cobertura:
 
 - `validateSearchParams`, `validateDays`, `validateUsers`, `validateTypes`, `validateUserQuery`
-- `buildJql` — 7 cenários incluindo múltiplos usuários, typeIds vs types, filtro de data
+- `buildJql` — múltiplos usuários, typeIds vs types, filtro de data, ORDER BY
 - `mapIssue` — campos normais e campos ausentes com fallback
-- `detectarNovidades` — 7 cenários: novo sem responsável, retorno para fila, mudança de status, movimentação, sem baseline
-- Dedup do autocomplete — 4 cenários incluindo o caso real Maycon/Marlon (duplicata por e-mail)
-- Validação de filtros (`preenchidos`) — 5 cenários
-- Alinhamento de colunas das tabelas
+- `detectarNovidades` (página e SW) — novo sem responsável, retorno para fila, mudança de status, movimentação, sem baseline, deduplicação de detecções
+- `buildParams` do SW — campos enviados, `days=0` não enviado, campos vazios omitidos
+- Consistência página↔SW — mesma lógica de detecção nos dois lados
+- Integração `visibilitychange` — handoff página→SW e SW→página
+- Dedup do autocomplete — duplicatas por e-mail, selecionados removidos, case-insensitive
 
 ---
 
@@ -380,11 +395,17 @@ Mesmo processo: edite `PORTFOLIOS_VALIDOS` em `validate.js` e o `<select id="sel
 
 ### Alterar o intervalo de polling
 
-Em `public/index.html`, altere a constante:
+Em `public/index.html` e `public/sw.js`, altere a constante de intervalo:
 
 ```js
-var REFRESH_INTERVAL = 60; // segundos — altere aqui
+// index.html
+var REFRESH_INTERVAL = 60; // segundos
+
+// sw.js
+const POLL_INTERVAL_MS = 60 * 1000; // milissegundos
 ```
+
+Mantenha os dois valores sincronizados para comportamento consistente entre aba ativa e background.
 
 ### Alterar os campos retornados por chamado
 
