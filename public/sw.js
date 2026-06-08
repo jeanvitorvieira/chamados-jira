@@ -42,7 +42,7 @@ async function poll(config) {
     if (config.portfolio) params.set('portfolio', config.portfolio);
     if (config.users)     params.set('users',     config.users);     // multi-user CSV
     if (config.typeIds)   params.set('typeIds',   config.typeIds);
-    if (config.days)      params.set('days',      config.days);
+    if (config.days && config.days !== '0') params.set('days', config.days);
 
     const r    = await fetch(`/api/chamados?${params}`);
     const data = await r.json();
@@ -149,9 +149,6 @@ async function poll(config) {
 
 // ── Helper de notificação ─────────────────────────────────────────────────────
 async function showNotif(title, body, tag) {
-  const perm = await self.registration.pushManager?.permissionState({ userVisibleOnly: true })
-    .catch(() => 'unknown');
-  // Tenta mostrar via registration (funciona mesmo sem Push API configurado)
   try {
     await self.registration.showNotification(title, {
       body,
