@@ -37,6 +37,11 @@
   .header-subtitle { font-size: 11px; opacity: .75; font-weight: 400; }
   .header-right { display: flex; align-items: center; gap: 10px; }
   .status-badge { background: #00C851; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 99px; letter-spacing: .04em; }
+  .notif-btn { background: none; border: 1.5px solid rgba(255,255,255,.35); border-radius: 99px; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background .15s, border-color .15s; white-space: nowrap; }
+  .notif-btn:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.7); }
+  .notif-btn.granted  { border-color: #00C851; color: #00C851; }
+  .notif-btn.default  { border-color: var(--orange); color: var(--orange); animation: pulse 2s infinite; }
+  .notif-btn.denied   { border-color: #e53935; color: #e53935; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
   .new-issues-banner { background: var(--orange-light); border: 1.5px solid var(--orange); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 16px; font-size: 13px; font-weight: 600; color: var(--orange-dark); display: flex; align-items: center; gap: 8px; animation: fadeIn .4s; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
@@ -149,6 +154,7 @@
     </div>
   </div>
   <div class="header-right">
+    <button class="notif-btn" id="notif-btn" onclick="clicarNotifBtn()" style="display:none" title=""></button>
     <span class="status-badge" id="status-badge">Online</span>
   </div>
 </header>
@@ -836,15 +842,50 @@ function atualizarKnownIssues(data) {
 // ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
 // ── SERVICE WORKER (notificações) ────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function() {});
+  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+    console.warn('[SW] Falha ao registrar:', err);
+  });
+}
+
+// ── Badge de notificação no header ───────────────────────────────────────────
+function atualizarBadgeNotif() {
+  var btn = document.getElementById('notif-btn');
+  if (!btn || !('Notification' in window)) return;
+  var perm = Notification.permission;
+  btn.style.display = 'flex';
+  btn.className = 'notif-btn ' + perm;
+  if (perm === 'granted') {
+    btn.textContent = '🔔 Alertas ativos';
+    btn.title = 'Notificações ativas — clique para testar';
+  } else if (perm === 'default') {
+    btn.textContent = '🔔 Ativar alertas';
+    btn.title = 'Clique para ativar notificações';
+  } else {
+    btn.textContent = '🔕 Alertas bloqueados';
+    btn.title = 'Notificações bloqueadas no navegador — clique para ver como resolver';
+  }
+}
+
+function clicarNotifBtn() {
+  var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+  if (perm === 'granted') {
+    // Dispara notificação de teste
+    notificar('🔔 Teste — Chamados por Vertical', 'As notificações estão funcionando!', 'teste');
+  } else if (perm === 'default') {
+    pedirPermissaoNotificacao();
+  } else {
+    alert('As notificações estão bloqueadas neste site.\n\nPara reativar:\n1. Clique no cadeado (🔒) na barra de endereços\n2. Em "Notificações", selecione "Permitir"\n3. Recarregue a página');
+  }
 }
 
 function pedirPermissaoNotificacao() {
   if (!('Notification' in window)) return;
+  atualizarBadgeNotif();
   if (Notification.permission === 'granted') {
     enviarBoasVindas();
   } else if (Notification.permission === 'default') {
     Notification.requestPermission().then(function(perm) {
+      atualizarBadgeNotif();
       if (perm === 'granted') enviarBoasVindas();
     });
   }
@@ -861,21 +902,24 @@ function enviarBoasVindas() {
 function notificar(titulo, corpo, tag) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if ('serviceWorker' in navigator) {
-    // navigator.serviceWorker.ready aguarda o SW estar ativo — resolve o problema de timing
     navigator.serviceWorker.ready.then(function(reg) {
-      reg.showNotification(titulo, {
+      return reg.showNotification(titulo, {
         body:     corpo,
         tag:      tag,
         renotify: true,
-        icon:     '/favicon.ico'
+        icon:     '/favicon.ico',
       });
-    }).catch(function() {
-      new Notification(titulo, { body: corpo, tag: tag });
+    }).catch(function(err) {
+      console.warn('[notif] showNotification falhou, usando fallback:', err);
+      try { new Notification(titulo, { body: corpo, tag: tag }); } catch(e) {}
     });
   } else {
-    new Notification(titulo, { body: corpo, tag: tag });
+    try { new Notification(titulo, { body: corpo, tag: tag }); } catch(e) {}
   }
 }
+
+// Inicializa badge assim que a página carrega
+atualizarBadgeNotif();
 
 // ── MULTI-USER TAGS ──────────────────────────────────────────────────────────
 function adicionarUserTag(u) {
