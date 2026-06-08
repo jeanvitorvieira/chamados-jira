@@ -948,11 +948,39 @@ function atualizarBadgeTitulo(delta) {
 }
 
 document.addEventListener('visibilitychange', function() {
-  if (!document.hidden) {
+  if (document.hidden) {
+    // Aba indo para background: passa o bastão ao Service Worker
+    if (buscaAtiva) {
+      pararPolling();
+      swMensagem('START_POLLING', {
+        vertical:    document.getElementById('sel-vertical').value,
+        portfolio:   document.getElementById('sel-portfolio').value,
+        users:       selectedUsers.map(function(u) { return u.name; }).join(','),
+        typeIds:     [...tiposSelected].join(','),
+        days:        document.getElementById('sel-days').value,
+        knownIssues: knownIssues,
+      });
+    }
+  } else {
+    // Aba voltando ao foco: retoma controle, SW para
     pendingCount = 0;
     document.title = 'Chamados por Vertical — Betha Sistemas';
+    if (buscaAtiva) {
+      swMensagem('STOP_POLLING');
+      knownIssues = {}; // reset baseline — não gera banners pelo período ausente
+      limparBanners();
+      buscar(true);     // refresh imediato para estabelecer novo baseline
+    }
   }
 });
+
+// Envia mensagem para o Service Worker ativo
+function swMensagem(tipo, payload) {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(function(reg) {
+    if (reg.active) reg.active.postMessage({ type: tipo, payload: payload });
+  }).catch(function() {});
+}
 
 // ── TEMPO NA FILA ─────────────────────────────────────────────────────────────
 function tempoRelativo(iso) {

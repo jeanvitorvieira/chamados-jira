@@ -1,35 +1,48 @@
-// Service Worker — polling de chamados para notificações dinâmicas
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
-let pollTimer = null;
+// Service Worker — polling de chamados para notificações em background
+// Ativado quando a aba vai para segundo plano; desativado quando volta ao foco.
+
+const POLL_INTERVAL_MS = 60 * 1000; // 60 segundos (igual ao polling da página)
+
+let pollTimer    = null;
+self._polling    = false;
+self._pollConfig = null;
 
 self.addEventListener('install',  () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', e  => e.waitUntil(self.clients.claim()));
 
+// ── Mensagens da página ───────────────────────────────────────────────────────
 self.addEventListener('message', e => {
-  if (e.data?.type === 'START_POLLING') startPolling(e.data.payload);
-  if (e.data?.type === 'STOP_POLLING')  stopPolling();
+  const { type, payload } = e.data || {};
+  if (type === 'START_POLLING') startPolling(payload);
+  if (type === 'STOP_POLLING')  stopPolling();
 });
 
 function startPolling(config) {
   stopPolling();
+  self._polling    = true;
   self._pollConfig = config;
+  // Primeira execução imediata para sincronizar baseline
   poll(config);
-  pollTimer = setInterval(() => poll(self._pollConfig), POLL_INTERVAL_MS);
+  pollTimer = setInterval(() => {
+    if (self._polling) poll(self._pollConfig);
+  }, POLL_INTERVAL_MS);
 }
 
 function stopPolling() {
+  self._polling = false;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+// ── Poll principal ────────────────────────────────────────────────────────────
 async function poll(config) {
   if (!config) return;
   try {
     const params = new URLSearchParams();
     if (config.vertical)  params.set('vertical',  config.vertical);
     if (config.portfolio) params.set('portfolio', config.portfolio);
-    if (config.user)      params.set('user',       config.user);
-    if (config.typeIds)   params.set('typeIds',    config.typeIds);
-    if (config.days)      params.set('days',       config.days);
+    if (config.users)     params.set('users',     config.users);     // multi-user CSV
+    if (config.typeIds)   params.set('typeIds',   config.typeIds);
+    if (config.days)      params.set('days',      config.days);
 
     const r    = await fetch(`/api/chamados?${params}`);
     const data = await r.json();
@@ -38,35 +51,52 @@ async function poll(config) {
     const unassigned = data.unassigned || [];
     const assigned   = data.assigned   || [];
 
-    // knownIssues = { [key]: { status, assignee } }
-    const known = config.knownIssues || {};
+    // known = { [key]: { status, assignee, updated } }
+    const known      = self._pollConfig?.knownIssues || {};
     const isFirstRun = Object.keys(known).length === 0;
 
-    // Constrói o snapshot atual
+    // Snapshot atual
     const current = {};
-    unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null }; });
-    assigned.forEach(i => {   current[i.key] = { status: i.status, assignee: i.assignee }; });
+    unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null,       updated: i.updated }; });
+    assigned.forEach(i   => { current[i.key] = { status: i.status, assignee: i.assignee, updated: i.updated }; });
 
-    // Na primeira execução, apenas salva o baseline sem notificar
-    if (isFirstRun) {
-      self._pollConfig = { ...config, knownIssues: current };
-      notifyClients({ type: 'BASELINE_SET', knownIssues: current });
-      return;
-    }
+    // Atualiza baseline antes de qualquer coisa
+    self._pollConfig = { ...config, knownIssues: current };
 
-    // ── Detecta novos chamados sem responsável ────────────────────────────────
-    const novosUnassigned = unassigned.filter(i => !known[i.key]);
+    // Na primeira execução apenas salva o baseline, sem notificar
+    if (isFirstRun) return;
 
-    // ── Detecta mudanças de status em chamados atribuídos ────────────────────
-    const statusChanged = assigned.filter(i => {
+    // ── 1. Novos sem responsável (novo ou voltou da fila) ─────────────────────
+    const novosUnassigned = unassigned.filter(i => {
+      const prev = known[i.key];
+      return !prev || prev.assignee !== null;
+    });
+
+    // ── 2. Mudança de status em atribuídos ────────────────────────────────────
+    const statusAlterado = assigned.filter(i => {
       const prev = known[i.key];
       return prev && prev.status !== i.status;
     }).map(i => ({ ...i, prevStatus: known[i.key].status }));
 
-    // Atualiza baseline independente de haver novidades
-    self._pollConfig = { ...config, knownIssues: current };
+    const novosKeys  = new Set(novosUnassigned.map(i => i.key));
+    const statusKeys = new Set(statusAlterado.map(i => i.key));
 
-    // ── Notificações ──────────────────────────────────────────────────────────
+    // ── 3. Movimentação (updated mudou, status igual) ─────────────────────────
+    const all = unassigned.concat(assigned);
+    const movimentados = all.filter(i => {
+      if (novosKeys.has(i.key) || statusKeys.has(i.key)) return false;
+      const prev = known[i.key];
+      return prev && prev.status === i.status && prev.updated !== i.updated;
+    });
+
+    // ── 4. Chamados atribuídos que sumiram (possível encerramento) ────────────
+    const currentKeys     = new Set(all.map(i => i.key));
+    const resultTruncated = data.totalAssigned > assigned.length;
+    const desaparecidos   = resultTruncated ? [] : Object.keys(known).filter(k =>
+      !currentKeys.has(k) && known[k].assignee !== null
+    );
+
+    // ── Dispara notificações ──────────────────────────────────────────────────
     if (novosUnassigned.length > 0) {
       const title = novosUnassigned.length === 1
         ? `⚠️ Novo chamado sem responsável: ${novosUnassigned[0].key}`
@@ -74,44 +104,70 @@ async function poll(config) {
       const body = novosUnassigned.length === 1
         ? novosUnassigned[0].summary
         : novosUnassigned.map(i => `• ${i.key} — ${i.summary.slice(0, 55)}`).join('\n');
-
-      self.registration.showNotification(title, {
-        body, tag: 'novos-unassigned', renotify: true, data: { url: '/' },
-      });
-
-      notifyClients({ type: 'NEW_UNASSIGNED', issues: novosUnassigned, knownIssues: current });
+      await showNotif(title, body, 'unassigned');
     }
 
-    if (statusChanged.length > 0) {
-      const title = statusChanged.length === 1
-        ? `🔄 Status alterado: ${statusChanged[0].key}`
-        : `🔄 ${statusChanged.length} chamados com status alterado`;
-      const body = statusChanged.length === 1
-        ? `${statusChanged[0].summary}\n${statusChanged[0].prevStatus} → ${statusChanged[0].status}`
-        : statusChanged.map(i => `• ${i.key}: ${i.prevStatus} → ${i.status}`).join('\n');
-
-      self.registration.showNotification(title, {
-        body, tag: 'status-changed', renotify: true, data: { url: '/' },
-      });
-
-      notifyClients({ type: 'STATUS_CHANGED', issues: statusChanged, knownIssues: current });
+    if (statusAlterado.length > 0) {
+      const title = statusAlterado.length === 1
+        ? `🔄 Status alterado: ${statusAlterado[0].key}`
+        : `🔄 ${statusAlterado.length} chamados com status alterado`;
+      const body = statusAlterado.length === 1
+        ? `${statusAlterado[0].summary}\n${statusAlterado[0].prevStatus} → ${statusAlterado[0].status}`
+        : statusAlterado.map(i => `• ${i.key}: ${i.prevStatus} → ${i.status}`).join('\n');
+      await showNotif(title, body, 'status');
     }
 
-    // Notifica a página para atualizar a UI (mesmo sem novidades = refresh silencioso)
-    notifyClients({ type: 'POLL_DONE', knownIssues: current });
+    if (movimentados.length > 0) {
+      const title = movimentados.length === 1
+        ? `📋 Movimentação: ${movimentados[0].key}`
+        : `📋 ${movimentados.length} chamados com movimentação`;
+      const body = movimentados.length === 1
+        ? movimentados[0].summary
+        : movimentados.map(i => `• ${i.key} — ${i.summary.slice(0, 55)}`).join('\n');
+      await showNotif(title, body, 'movimentacao');
+    }
 
-  } catch { /* falha silenciosa */ }
+    if (desaparecidos.length > 0) {
+      try {
+        const r2   = await fetch(`/api/issues?keys=${desaparecidos.join(',')}`);
+        const d2   = await r2.json();
+        const enc  = (d2.issues || []).filter(i => i.statusCat === 'done');
+        if (enc.length > 0) {
+          const title = enc.length === 1
+            ? `✅ Chamado encerrado: ${enc[0].key}`
+            : `✅ ${enc.length} chamados encerrados`;
+          const body = enc.length === 1
+            ? `Status: ${enc[0].status}`
+            : enc.map(i => `• ${i.key} — ${i.status}`).join('\n');
+          await showNotif(title, body, 'encerrado');
+        }
+      } catch { /* falha silenciosa */ }
+    }
+
+  } catch { /* falha silenciosa — sem internet, Jira offline, etc. */ }
 }
 
-async function notifyClients(msg) {
-  const clients = await self.clients.matchAll({ type: 'window' });
-  clients.forEach(c => c.postMessage(msg));
+// ── Helper de notificação ─────────────────────────────────────────────────────
+async function showNotif(title, body, tag) {
+  const perm = await self.registration.pushManager?.permissionState({ userVisibleOnly: true })
+    .catch(() => 'unknown');
+  // Tenta mostrar via registration (funciona mesmo sem Push API configurado)
+  try {
+    await self.registration.showNotification(title, {
+      body,
+      tag,
+      renotify: true,
+      icon:     '/favicon.ico',
+      data:     { url: '/' },
+    });
+  } catch { /* permissão negada ou SW sem escopo */ }
 }
 
+// ── Click na notificação → foca ou abre a aba ─────────────────────────────────
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   e.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then(clients => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
       const existing = clients.find(c => c.url.includes(self.location.origin));
       if (existing) return existing.focus();
       return self.clients.openWindow('/');
