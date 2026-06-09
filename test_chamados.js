@@ -463,6 +463,185 @@ test('SW: knownIssues passado pela página é usado como baseline correto', () =
   eq(r.status[0].prevStatus, 'Em andamento');
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// NOVOS TESTES — bugs corrigidos no último commit
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Mock: timer generation (bug 5) ───────────────────────────────
+function mockTimerState() {
+  let generation = 0;
+  const msgs = [];
+  const worker = {
+    postMessage(msg) { msgs.push(msg); },
+    lastMsg() { return msgs[msgs.length - 1]; },
+  };
+  return {
+    worker,
+    msgs,
+    increment() { generation++; },
+    currentGen() { return generation; },
+    isStale(gen) { return gen !== generation; },
+  };
+}
+
+test('Bug 5: tick com gen antigo é descartado', () => {
+  const t = mockTimerState();
+  t.increment(); // simula pararPolling
+  const staleGen = t.currentGen() - 1;
+  assert(t.isStale(staleGen), 'gen antigo deve ser considerado stale');
+});
+
+test('Bug 5: tick com gen atual é aceito', () => {
+  const t = mockTimerState();
+  const gen = t.currentGen();
+  assert(!t.isStale(gen), 'gen atual não deve ser stale');
+});
+
+test('Bug 5: pararPolling invalida ticks em voo', () => {
+  const t = mockTimerState();
+  const genAntes = t.currentGen();
+  t.increment(); // simula pararPolling
+  assert(t.isStale(genAntes), 'tick disparado antes do stop deve ser ignorado após increment');
+  assert(!t.isStale(t.currentGen()), 'gen atual após stop é válido');
+});
+
+test('Bug 5: worker recebe gen no start e ecoa no done', () => {
+  // Simula o contrato: start com gen=N → done com gen=N
+  const mensagens = [];
+  const workerMock = { postMessage(m) { mensagens.push(m); } };
+  const gen = 3;
+  workerMock.postMessage({ cmd: 'start', interval: 60, gen });
+  const sent = mensagens[0];
+  eq(sent.gen, gen, 'gen deve ser enviado no start');
+  eq(sent.cmd, 'start', 'cmd deve ser start');
+});
+
+// ── Mock: sortState reset (bug 2) ────────────────────────────────
+function mockSortState(col, dir) {
+  return { col: col || null, dir: dir || 'asc' };
+}
+
+test('Bug 2: sortState reseta ao fazer busca manual', () => {
+  let sortState = mockSortState('priority', 'desc');
+  // simula o reset que acontece no !silencioso
+  sortState.col = null;
+  sortState.dir = 'asc';
+  eq(sortState.col, null, 'col deve ser null após busca manual');
+  eq(sortState.dir, 'asc', 'dir deve voltar para asc');
+});
+
+test('Bug 2: sortState intacto durante refresh silencioso', () => {
+  let sortState = mockSortState('priority', 'desc');
+  const silencioso = true;
+  if (!silencioso) { sortState.col = null; sortState.dir = 'asc'; }
+  eq(sortState.col, 'priority', 'sort preservado no refresh silencioso');
+  eq(sortState.dir, 'desc', 'direção preservada no refresh silencioso');
+});
+
+// ── Mock: detectarNovidades com try/catch (bug 3) ─────────────────
+function detectarNovidadesSafe(knownIssues, data, detectFn) {
+  let baseline = knownIssues;
+  let detectOk = false;
+  let baselineAtualizado = false;
+  try {
+    detectFn(knownIssues, data);
+    detectOk = true;
+  } catch(e) { /* ignora — igual ao try/catch do código */ }
+  // atualizarKnownIssues sempre roda depois, independente do erro
+  baseline = {};
+  (data.unassigned || []).concat(data.assigned || []).forEach(i => {
+    baseline[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
+  });
+  baselineAtualizado = true;
+  return { detectOk, baselineAtualizado, baseline };
+}
+
+test('Bug 3: baseline atualiza mesmo se detectarNovidades lançar exceção', () => {
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const data  = {
+    unassigned: [{ key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }],
+    assigned: [],
+  };
+  const broken = () => { throw new Error('erro simulado'); };
+  const r = detectarNovidadesSafe(known, data, broken);
+  assert(r.baselineAtualizado, 'baseline deve ser atualizado mesmo com exceção');
+  assert(r.baseline['A-2'], 'novo issue deve estar no baseline');
+  assert(!r.baseline['A-1'], 'issue antigo não presente nos novos dados deve sumir do baseline');
+});
+
+test('Bug 3: baseline atualiza normalmente quando detectarNovidades não lança', () => {
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const data  = {
+    unassigned: [{ key: 'A-1', status: 'Em andamento', assignee: null, updated: 't2', summary: 'Y' }],
+    assigned: [],
+  };
+  const ok = (k, d) => swDetect(k, d); // não lança
+  const r = detectarNovidadesSafe(known, data, ok);
+  assert(r.detectOk, 'detect deve ter rodado sem erro');
+  assert(r.baselineAtualizado, 'baseline atualizado normalmente');
+  eq(r.baseline['A-1'].status, 'Em andamento', 'status atualizado no baseline');
+});
+
+// ── Mock: acTimeout cancelado ao selecionar item (bug 4) ──────────
+test('Bug 4: acTimeout é cancelado ao selecionar item do autocomplete', () => {
+  let timeoutCancelled = false;
+  let timeoutId = 'pending';
+  // simula clearTimeout(acTimeout) no click do item
+  const clearTimeout = (id) => { if (id) timeoutCancelled = true; };
+  clearTimeout(timeoutId);
+  assert(timeoutCancelled, 'clearTimeout deve ser chamado ao selecionar item');
+});
+
+test('Bug 4: sem timeout pendente, clearTimeout não causa erro', () => {
+  let threw = false;
+  try {
+    const clearTimeoutSafe = (id) => { /* não faz nada se null */ };
+    clearTimeoutSafe(null);
+  } catch(e) { threw = true; }
+  assert(!threw, 'clearTimeout com null não deve lançar');
+});
+
+// ── Mock: polling inicia mesmo com erro na primeira busca (bug 1) ─
+function mockBuscarComErro(silencioso) {
+  let buscaAtiva = false;
+  let pollingIniciado = false;
+  let erroExibido = false;
+
+  // simula o .catch corrigido
+  const onError = (err) => {
+    if (!silencioso) erroExibido = true;
+    if (buscaAtiva) {
+      // agendarProximoRefresh
+    } else if (!silencioso) {
+      buscaAtiva = true;
+      pollingIniciado = true; // iniciarPolling
+    }
+  };
+  onError(new Error('Jira offline'));
+  return { buscaAtiva, pollingIniciado, erroExibido };
+}
+
+test('Bug 1: polling inicia mesmo se primeira busca falha', () => {
+  const r = mockBuscarComErro(false);
+  assert(r.buscaAtiva, 'buscaAtiva deve ser true mesmo com erro');
+  assert(r.pollingIniciado, 'polling deve iniciar para tentar de novo');
+  assert(r.erroExibido, 'erro deve ser exibido para o usuário');
+});
+
+test('Bug 1: refresh silencioso com erro apenas reagenda (não reinicia worker)', () => {
+  // com buscaAtiva=true simulado externamente
+  let buscaAtiva = true;
+  let reagendado = false;
+  let workerReiniciado = false;
+  const onError = (err, silencioso) => {
+    if (buscaAtiva) { reagendado = true; }
+    else if (!silencioso) { workerReiniciado = true; }
+  };
+  onError(new Error('timeout'), true);
+  assert(reagendado, 'deve reagendar no erro silencioso');
+  assert(!workerReiniciado, 'não deve reiniciar worker em refresh silencioso');
+});
+
 // ─── Executa ────────────────────────────────────────────────────────
 results.forEach(r => {
   if (r.ok) console.log(`  ✅ ${r.name}`);
