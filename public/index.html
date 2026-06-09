@@ -257,9 +257,10 @@
 var acTimeout        = null;
 var selectedUsers    = [];    // array de { name, displayName } — múltiplos responsáveis
 var buscaAtiva       = false; // true após a primeira busca bem-sucedida
-var autoRefreshTimer = null;  // setInterval do countdown de atualização
+var autoRefreshTimer = null;  // mantido por compatibilidade (não usado)
 var refreshCountdown = 0;
 var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
+var timerWorker = null;       // Web Worker que mantém o tick mesmo com a aba oculta
 var knownIssues = {};         // { [key]: { status, assignee, updated } } — baseline do ciclo atual
 var pendingCount = 0;         // contador para badge no título da aba
 var pendingTiposRestore = null; // tipos a restaurar após initTipos
@@ -1037,10 +1038,25 @@ function tempoFilaBadge(iso) {
 function iniciarPolling() {
   document.getElementById('refresh-bar').style.display = 'flex';
   ativarWakeLock();
+  // Cria o Web Worker uma única vez — ele sobrevive mesmo com a aba em background
+  if (!timerWorker) {
+    timerWorker = new Worker('/timer-worker.js');
+    timerWorker.onmessage = function(e) {
+      if (e.data.type === 'tick') {
+        refreshCountdown = e.data.remaining;
+        atualizarBarraRefresh();
+      } else if (e.data.type === 'done') {
+        document.getElementById('refresh-label').textContent = 'Atualizando...';
+        document.getElementById('refresh-dot').classList.remove('pulsing');
+        buscar(true);
+      }
+    };
+  }
   agendarProximoRefresh();
 }
 
 function pararPolling() {
+  if (timerWorker) { timerWorker.postMessage({ cmd: 'stop' }); }
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
   var bar = document.getElementById('refresh-bar');
   if (bar) bar.style.display = 'none';
@@ -1048,20 +1064,12 @@ function pararPolling() {
 
 function agendarProximoRefresh() {
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
-  document.getElementById('refresh-bar').style.display = 'flex'; // garante visibilidade
+  document.getElementById('refresh-bar').style.display = 'flex';
   refreshCountdown = REFRESH_INTERVAL;
   atualizarBarraRefresh();
-  autoRefreshTimer = setInterval(function() {
-    refreshCountdown--;
-    atualizarBarraRefresh();
-    if (refreshCountdown <= 0) {
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
-      document.getElementById('refresh-label').textContent = 'Atualizando...';
-      document.getElementById('refresh-dot').classList.remove('pulsing');
-      buscar(true); // refresh silencioso
-    }
-  }, 1000);
+  if (timerWorker) {
+    timerWorker.postMessage({ cmd: 'start', interval: REFRESH_INTERVAL });
+  }
 }
 
 function atualizarBarraRefresh() {
