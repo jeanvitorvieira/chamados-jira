@@ -261,6 +261,7 @@ var autoRefreshTimer = null;  // mantido por compatibilidade (não usado)
 var refreshCountdown = 0;
 var REFRESH_INTERVAL = 60;   // segundos entre atualizações automáticas
 var timerWorker = null;       // Web Worker que mantém o tick mesmo com a aba oculta
+var timerGeneration = 0;      // incrementado a cada pararPolling para descartar ticks antigos
 var knownIssues = {};         // { [key]: { status, assignee, updated } } — baseline do ciclo atual
 var pendingCount = 0;         // contador para badge no título da aba
 var pendingTiposRestore = null; // tipos a restaurar após initTipos
@@ -367,6 +368,7 @@ function fetchUsuarios(q) {
         // mousedown antes do blur — previne que a lista feche antes do click
         item.addEventListener('mousedown', function(e) { e.preventDefault(); });
         item.addEventListener('click', function() {
+          clearTimeout(acTimeout); // cancela debounce pendente para não reabrir a lista
           adicionarUserTag(u);
           inpUser.value = '';
           inpUser.classList.remove('inp-warn');
@@ -623,8 +625,10 @@ function buscar(silencioso) {
   if (days && days !== '0') params.set('days', days);
 
   if (!silencioso) {
-    // Busca manual: reseta baseline para o próximo ciclo automático começar do zero
+    // Busca manual: reseta baseline e ordenação para o novo conjunto de resultados
     knownIssues = {};
+    sortState.col = null;
+    sortState.dir = 'asc';
     document.getElementById('chips').style.display = 'none';
     document.getElementById('results').innerHTML =
       '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
@@ -642,7 +646,7 @@ function buscar(silencioso) {
       if (silencioso) {
         // Só no refresh automático: compara com baseline e exibe banners se houver novidades
         limparBanners();
-        detectarNovidades(data);
+        try { detectarNovidades(data); } catch(e) { console.warn('[novidades] erro:', e); }
       }
 
       atualizarKnownIssues(data);
@@ -662,7 +666,13 @@ function buscar(silencioso) {
         document.getElementById('results').innerHTML =
           '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
       }
-      if (buscaAtiva) agendarProximoRefresh(); // reagenda mesmo com erro
+      if (buscaAtiva) {
+        agendarProximoRefresh();
+      } else if (!silencioso) {
+        // Primeira busca falhou: ainda assim inicia o polling para tentar de novo
+        buscaAtiva = true;
+        iniciarPolling();
+      }
     });
 }
 
@@ -1042,10 +1052,13 @@ function iniciarPolling() {
   if (!timerWorker) {
     timerWorker = new Worker('/timer-worker.js');
     timerWorker.onmessage = function(e) {
+      var gen = e.data.gen;
       if (e.data.type === 'tick') {
+        if (gen !== timerGeneration) return; // tick de ciclo anterior — ignora
         refreshCountdown = e.data.remaining;
         atualizarBarraRefresh();
       } else if (e.data.type === 'done') {
+        if (gen !== timerGeneration) return; // done stale — ignora
         document.getElementById('refresh-label').textContent = 'Atualizando...';
         document.getElementById('refresh-dot').classList.remove('pulsing');
         buscar(true);
@@ -1056,6 +1069,7 @@ function iniciarPolling() {
 }
 
 function pararPolling() {
+  timerGeneration++; // invalida qualquer tick/done em voo do ciclo anterior
   if (timerWorker) { timerWorker.postMessage({ cmd: 'stop' }); }
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
   var bar = document.getElementById('refresh-bar');
@@ -1068,7 +1082,7 @@ function agendarProximoRefresh() {
   refreshCountdown = REFRESH_INTERVAL;
   atualizarBarraRefresh();
   if (timerWorker) {
-    timerWorker.postMessage({ cmd: 'start', interval: REFRESH_INTERVAL });
+    timerWorker.postMessage({ cmd: 'start', interval: REFRESH_INTERVAL, gen: timerGeneration });
   }
 }
 
