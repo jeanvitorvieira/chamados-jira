@@ -652,6 +652,7 @@ function buscar(silencioso) {
         pedirPermissaoNotificacao();
         iniciarPolling();
       } else {
+        // Atualiza config da subscription WebPush se filtros mudaram
         agendarProximoRefresh();
       }
     })
@@ -837,10 +838,11 @@ function atualizarKnownIssues(data) {
   all.forEach(function(i) {
     knownIssues[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
+  // Persiste baseline para detectar novidades após período com aba fechada/oculta
 }
 
 // ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
-// ── SERVICE WORKER (notificações) ────────────────────────────────────────────
+// ── SERVICE WORKER + WebPush ──────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function(err) {
     console.warn('[SW] Falha ao registrar:', err);
@@ -897,6 +899,7 @@ function enviarBoasVindas() {
     + '• Novos chamados sem responsável\n'
     + (nomes.length ? '• Atualizações nos chamados de ' + nomes.join(', ') : '• Atualizações nos chamados atribuídos');
   notificar('✅ Alertas ativados — Chamados por Vertical', corpo, 'boas-vindas');
+  // Registra subscription WebPush para notificações mesmo com o site fechado
 }
 
 function notificar(titulo, corpo, tag) {
@@ -991,40 +994,27 @@ function atualizarBadgeTitulo(delta) {
     : 'Chamados por Vertical — Betha Sistemas';
 }
 
+// ── WAKE LOCK — impede que o navegador suspenda a aba ────────────────────────
+var wakeLock = null;
+
+async function ativarWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+  } catch(e) { /* permissão negada ou não suportado — sem problema */ }
+}
+
+// A Wake Lock é liberada automaticamente quando a aba fica oculta;
+// reativa quando a aba volta ao foco.
 document.addEventListener('visibilitychange', function() {
-  if (document.hidden) {
-    // Aba indo para background: passa o bastão ao Service Worker
-    if (buscaAtiva) {
-      pararPolling();
-      swMensagem('START_POLLING', {
-        vertical:    document.getElementById('sel-vertical').value,
-        portfolio:   document.getElementById('sel-portfolio').value,
-        users:       selectedUsers.map(function(u) { return u.name; }).join(','),
-        typeIds:     [...tiposSelected].join(','),
-        days:        document.getElementById('sel-days').value,
-        knownIssues: knownIssues,
-      });
-    }
-  } else {
-    // Aba voltando ao foco: retoma controle, SW para
+  if (!document.hidden && buscaAtiva) {
+    ativarWakeLock();
+    // Reseta contador de título ao voltar ao foco
     pendingCount = 0;
     document.title = 'Chamados por Vertical — Betha Sistemas';
-    if (buscaAtiva) {
-      swMensagem('STOP_POLLING');
-      knownIssues = {}; // reset baseline — não gera banners pelo período ausente
-      limparBanners();
-      buscar(true);     // refresh imediato para estabelecer novo baseline
-    }
   }
 });
 
-// Envia mensagem para o Service Worker ativo
-function swMensagem(tipo, payload) {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.ready.then(function(reg) {
-    if (reg.active) reg.active.postMessage({ type: tipo, payload: payload });
-  }).catch(function() {});
-}
 
 // ── TEMPO NA FILA ─────────────────────────────────────────────────────────────
 function tempoRelativo(iso) {
@@ -1046,6 +1036,7 @@ function tempoFilaBadge(iso) {
 // ── POLLING EM TEMPO REAL ─────────────────────────────────────────────────────
 function iniciarPolling() {
   document.getElementById('refresh-bar').style.display = 'flex';
+  ativarWakeLock();
   agendarProximoRefresh();
 }
 
