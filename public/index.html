@@ -142,6 +142,15 @@
   .tempo-fila.ok  { background: #E8F5E9; color: #2E7D32; }
   .tempo-fila.avg { background: #FFF3E0; color: #E65100; }
   .tempo-fila.bad { background: var(--red-light); color: var(--red); }
+
+  #notif-guide { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 999; display: flex; align-items: flex-start; justify-content: flex-end; padding: 70px 24px 0; }
+  #notif-guide-box { background: var(--white); border: 1px solid var(--gray-border); border-radius: 12px; padding: 20px; max-width: 360px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,.4); position: relative; animation: fadeInDown .2s ease; }
+  #notif-guide-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  #notif-guide-close:hover { background: var(--gray-border); color: var(--text-primary); }
+  .notif-guide-step { display: flex; gap: 12px; align-items: flex-start; }
+  .notif-guide-num { min-width: 22px; height: 22px; background: var(--blue-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; margin-top: 2px; }
+  @keyframes fadeInDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+  select:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -159,6 +168,42 @@
     <span class="status-badge" id="status-badge">Online</span>
   </div>
 </header>
+
+<!-- Guia de permissão de notificações -->
+<div id="notif-guide" style="display:none">
+  <div id="notif-guide-box">
+    <button id="notif-guide-close" onclick="fecharGuiaNotif()" title="Fechar">✕</button>
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px">🔔 Como ativar as notificações</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="notif-guide-step">
+        <span class="notif-guide-num">1</span>
+        <div>
+          <strong>Permita no sistema operacional</strong><br>
+          <span style="color:var(--text-secondary);font-size:12px">
+            Windows: <em>Configurações → Sistema → Notificações → Google Chrome → Ativar</em><br>
+            Mac: <em>Preferências do Sistema → Notificações → Google Chrome → Permitir</em>
+          </span>
+        </div>
+      </div>
+      <div class="notif-guide-step">
+        <span class="notif-guide-num">2</span>
+        <div>
+          <strong>Permita no navegador</strong><br>
+          <span style="color:var(--text-secondary);font-size:12px">
+            Clique no 🔒 cadeado na barra de endereços → <em>Notificações → Permitir</em>
+          </span>
+        </div>
+      </div>
+      <div class="notif-guide-step">
+        <span class="notif-guide-num">3</span>
+        <div>
+          <strong>Recarregue e clique em "Ativar alertas"</strong><br>
+          <span style="color:var(--text-secondary);font-size:12px">O botão no canto superior direito da tela</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <main>
   <div class="filter-card">
@@ -893,15 +938,18 @@ function atualizarBadgeNotif() {
   }
 }
 
+function fecharGuiaNotif() {
+  document.getElementById('notif-guide').style.display = 'none';
+}
+
 function clicarNotifBtn() {
   var perm = ('Notification' in window) ? Notification.permission : 'unsupported';
   if (perm === 'granted') {
-    // Dispara notificação de teste
     notificar('🔔 Teste — Chamados por Vertical', 'As notificações estão funcionando!', 'teste');
   } else if (perm === 'default') {
     pedirPermissaoNotificacao();
   } else {
-    alert('As notificações estão bloqueadas neste site.\n\nPara reativar:\n1. Clique no cadeado (🔒) na barra de endereços\n2. Em "Notificações", selecione "Permitir"\n3. Recarregue a página');
+    document.getElementById('notif-guide').style.display = 'flex';
   }
 }
 
