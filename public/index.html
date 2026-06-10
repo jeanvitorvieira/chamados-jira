@@ -83,12 +83,10 @@
   tbody tr:hover td { background: #F8FAFF; }
   .key-link { color: var(--blue-mid); text-decoration: none; font-weight: 700; font-size: 12px; }
   .key-link:hover { text-decoration: underline; }
-  /* Ordenação de colunas */
   thead th.sortable { cursor: pointer; user-select: none; }
   thead th.sortable:hover { background: #eaecf2; }
   thead th.sort-asc::after  { content: ' ▲'; font-size: 9px; }
   thead th.sort-desc::after { content: ' ▼'; font-size: 9px; }
-  /* Aviso de resultado incompleto */
   .incomplete-banner { background: var(--blue-light); border: 1.5px solid var(--blue-mid); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 12px; font-size: 12px; color: var(--blue-primary); font-weight: 600; }
   .pri-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
   .pri-1 { background: var(--red-light); color: var(--red); }
@@ -102,7 +100,6 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .placeholder-msg { text-align: center; padding: 60px 20px; color: var(--text-secondary); font-size: 14px; }
   .placeholder-msg .big { font-size: 40px; margin-bottom: 10px; }
-  /* Refresh bar */
   .refresh-bar { display: flex; align-items: center; gap: 10px; padding: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
   .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
   .refresh-dot.pulsing { animation: pulse 1.5s infinite; }
@@ -112,9 +109,7 @@
   .inp-warn::placeholder { color: var(--orange-dark); }
   .form-group .inp-hint { font-size: 11px; color: var(--orange-dark); margin-top: 3px; display: none; }
   .inp-warn ~ .inp-hint, input.inp-warn + input + .inp-hint { display: block; }
-  /* Segunda linha de filtros */
   .filters-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-border); }
-  /* Multi-select de tipos */
   .multiselect-wrap { position: relative; }
   .multiselect-btn { width: 100%; border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; transition: border-color .15s; }
   .multiselect-btn:hover, .multiselect-btn.open { border-color: var(--blue-mid); }
@@ -130,19 +125,16 @@
   .multiselect-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; cursor: pointer; font-size: 13px; }
   .multiselect-item:hover { background: var(--gray-bg); }
   .multiselect-item input[type=checkbox] { accent-color: var(--blue-primary); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
-  /* Multi-user tags */
   .user-tags-wrap { border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 4px 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; cursor: text; min-height: 40px; transition: border-color .15s; background: var(--white); }
   .user-tags-wrap:focus-within { border-color: var(--blue-mid); }
   .user-tags-wrap input { border: none; outline: none; font-size: 13px; color: var(--text-primary); background: transparent; min-width: 120px; flex: 1; padding: 3px 0; }
   .user-tag { background: var(--blue-light); color: var(--blue-primary); border-radius: 4px; padding: 2px 6px 2px 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
   .user-tag .tag-x { cursor: pointer; font-size: 14px; line-height: 1; color: var(--blue-mid); font-weight: 400; }
   .user-tag .tag-x:hover { color: var(--red); }
-  /* Tempo na fila */
   .tempo-fila { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; margin-top: 3px; }
   .tempo-fila.ok  { background: #E8F5E9; color: #2E7D32; }
   .tempo-fila.avg { background: #FFF3E0; color: #E65100; }
   .tempo-fila.bad { background: var(--red-light); color: var(--red); }
-
   #notif-guide { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 999; display: flex; align-items: flex-start; justify-content: flex-end; padding: 70px 24px 0; }
   #notif-guide-box { background: var(--white); border: 1px solid var(--gray-border); border-radius: 12px; padding: 20px; max-width: 360px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,.4); position: relative; animation: fadeInDown .2s ease; }
   #notif-guide-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
@@ -150,7 +142,6 @@
   .notif-guide-step { display: flex; gap: 12px; align-items: flex-start; }
   .notif-guide-num { min-width: 22px; height: 22px; background: var(--blue-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; margin-top: 2px; }
   @keyframes fadeInDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-  select:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -169,7 +160,6 @@
   </div>
 </header>
 
-<!-- Guia de permissão de notificações -->
 <div id="notif-guide" style="display:none">
   <div id="notif-guide-box">
     <button id="notif-guide-close" onclick="fecharGuiaNotif()" title="Fechar">✕</button>
@@ -312,6 +302,7 @@ var knownIssues = {};         // { [key]: { status, assignee, updated } } — ba
 var pendingCount = 0;         // contador para badge no título da aba
 var pendingTiposRestore = null; // tipos a restaurar após initTipos
 var pendingAutoSearch   = false; // busca automática pendente após restaurar filtros
+var buscarController = null;     // AbortController da busca atual, para cancelar quando filtros mudarem
 
 var inpUser = document.getElementById('inp-user');
 var acList  = document.getElementById('autocomplete-list');
@@ -332,7 +323,7 @@ function setBadge(online) {
   badge.textContent = online ? 'Online' : 'Offline';
   badge.style.background = online ? '#00C851' : '#e53935';
 }
-// Fetch único: health-check do badge + população do dropdown de tipos
+
 fetch('/api/tipos')
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -341,7 +332,6 @@ fetch('/api/tipos')
   })
   .catch(function() {
     setBadge(false);
-    // Se /api/tipos falhar, ainda dispara a busca automática pendente
     if (pendingAutoSearch) { pendingAutoSearch = false; buscar(); }
   });
 
@@ -354,7 +344,6 @@ inpUser.addEventListener('input', function() {
   acTimeout = setTimeout(function() { fetchUsuarios(q); }, 300);
 });
 
-// Fecha ao clicar fora — usando blur apenas quando o foco não vai para a lista
 inpUser.addEventListener('blur', function() {
   setTimeout(function() {
     if (!acList.contains(document.activeElement)) {
@@ -390,8 +379,6 @@ function fetchUsuarios(q) {
   fetch('/api/usuarios?q=' + encodeURIComponent(q))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      // Deduplica por name E por email (Jira cria 2 registros: username e email-como-username)
-      // e remove já selecionados (comparando por name ou email)
       var seenNames  = {};
       var seenEmails = {};
       var users = (data.users || []).filter(function(u) {
@@ -411,17 +398,15 @@ function fetchUsuarios(q) {
       users.forEach(function(u) {
         var item = document.createElement('div');
         item.className = 'autocomplete-item';
-        // mousedown antes do blur — previne que a lista feche antes do click
         item.addEventListener('mousedown', function(e) { e.preventDefault(); });
         item.addEventListener('click', function() {
-          clearTimeout(acTimeout); // cancela debounce pendente para não reabrir a lista
+          clearTimeout(acTimeout);
           adicionarUserTag(u);
           inpUser.value = '';
           inpUser.classList.remove('inp-warn');
           acList.classList.remove('open');
           buscar();
         });
-        // Usa textContent para evitar XSS com dados do Jira
         var nameEl = document.createElement('span');
         nameEl.textContent = u.displayName;
         var emailEl = document.createElement('span');
@@ -442,7 +427,6 @@ function fetchUsuarios(q) {
 var tiposSelected = new Set(); // Set de IDs numéricos selecionados
 var tiposNomeMap  = {};        // { "1,10015": "Incidente", ... } para exibição
 
-// Tipos priorizados: aparecem no topo e vêm pré-selecionados
 var TIPOS_PRIORITARIOS = [
   'Acompanhamento técnico',
   'Capacitação',
@@ -460,7 +444,6 @@ function initTipos(tipos) {
   tiposNomeMap = {};
   tiposSelected.clear();
 
-  // Ordena: prioritários primeiro (na ordem definida), resto em seguida alfabeticamente
   var prioritarios = [];
   var restantes    = [];
   tipos.forEach(function(tipo) {
@@ -479,8 +462,6 @@ function initTipos(tipos) {
     return na.localeCompare(nb, 'pt-BR');
   });
   var ordenados = prioritarios.concat(restantes);
-
-  // Separador visual entre prioritários e restantes
   var haRestantes = restantes.length > 0;
 
   ordenados.forEach(function(tipo, idx) {
@@ -490,7 +471,6 @@ function initTipos(tipos) {
     var isPrioritario = TIPOS_PRIORITARIOS.indexOf(name) >= 0;
     tiposNomeMap[key] = name;
 
-    // Separador antes do primeiro tipo não-prioritário
     if (haRestantes && idx === prioritarios.length) {
       var sep = document.createElement('div');
       sep.className = 'tipo-separator';
@@ -504,7 +484,6 @@ function initTipos(tipos) {
     cb.type = 'checkbox';
     cb.value = key;
 
-    // Pré-seleciona os tipos prioritários
     if (isPrioritario) {
       cb.checked = true;
       tiposSelected.add(key);
@@ -521,7 +500,6 @@ function initTipos(tipos) {
     container.appendChild(label);
   });
 
-  // Restaura seleção persistida (sobrescreve a pré-seleção padrão se houver dado salvo)
   if (pendingTiposRestore) {
     tiposSelected.clear();
     document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
@@ -535,10 +513,8 @@ function initTipos(tipos) {
 
   atualizarTipoLabel();
 
-  // Se a primeira busca já rodou sem tipos carregados, rebusca para aplicar o filtro
   if (buscaAtiva && tiposSelected.size > 0) buscar();
 
-  // Após restaurar filtros salvos, dispara busca automática
   if (pendingAutoSearch) {
     pendingAutoSearch = false;
     buscar();
@@ -552,7 +528,6 @@ function toggleTipoDropdown() {
   btn.classList.toggle('open');
   dd.classList.toggle('open');
   if (isOpening) {
-    // Limpa a pesquisa ao abrir e foca no campo
     var search = document.getElementById('tipo-search');
     search.value = '';
     filtrarTipos('');
@@ -566,7 +541,6 @@ function filtrarTipos(q) {
     var nome = item.textContent.trim().toLowerCase();
     item.style.display = nome.includes(termo) ? '' : 'none';
   });
-  // Esconde o separador se não há itens visíveis de ambos os lados
   var sep = document.querySelector('#tipo-items .tipo-separator');
   if (!sep) return;
   var items = Array.prototype.slice.call(document.querySelectorAll('#tipo-items .multiselect-item'));
@@ -582,7 +556,6 @@ function filtrarTipos(q) {
 
 function selecionarTodosTipos() {
   tiposSelected.clear();
-  // Seleciona apenas os itens visíveis (considera filtro de pesquisa ativo)
   document.querySelectorAll('#tipo-items .multiselect-item').forEach(function(item) {
     if (item.style.display === 'none') return;
     var cb = item.querySelector('input[type=checkbox]');
@@ -607,7 +580,11 @@ function atualizarTipoLabel() {
     var badge = btn.querySelector('.multiselect-badge');
     if (badge) badge.remove();
   } else {
-    var nomes = [...tiposSelected].map(function(k) { return tiposNomeMap[k] || k; });
+    var arrKeys = Array.from ? Array.from(tiposSelected) : [];
+    if (!arrKeys.length) {
+      tiposSelected.forEach(function(k) { arrKeys.push(k); });
+    }
+    var nomes = arrKeys.map(function(k) { return tiposNomeMap[k] || k; });
     label.textContent = tiposSelected.size === 1
       ? nomes[0]
       : tiposSelected.size + ' tipos';
@@ -621,7 +598,6 @@ function atualizarTipoLabel() {
   }
 }
 
-// Fecha dropdown ao clicar fora
 document.addEventListener('click', function(e) {
   var wrap = document.getElementById('tipo-wrap');
   if (wrap && !wrap.contains(e.target)) {
@@ -632,11 +608,15 @@ document.addEventListener('click', function(e) {
 
 // ── BUSCA ────────────────────────────────────────────────────────────────────
 function buscar(silencioso) {
+  if (buscarController) {
+    buscarController.abort();
+  }
+  buscarController = new AbortController();
+
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
   var userNames = selectedUsers.map(function(u) { return u.name; });
 
-  // Bloqueia se digitou algo no campo responsável mas não selecionou da lista
   if (inpUser.value.trim()) {
     if (!silencioso) {
       inpUser.classList.add('inp-warn');
@@ -649,9 +629,21 @@ function buscar(silencioso) {
     return;
   }
 
-  // Exige pelo menos 2 filtros preenchidos, exceto para as verticals 'saúde' ou 'educação'
+  // ── AJUSTE DE SEGURANÇA: Neutraliza manipulações via Inspecionar Elemento ──
+  var vLower = (vertical || '').toLowerCase();
+  if (vLower === 'saúde' || vLower === 'educação') {
+    portfolio = ''; 
+    var selPortfolio = document.getElementById('sel-portfolio');
+    if (selPortfolio) {
+      selPortfolio.value = '';
+      selPortfolio.disabled = true;
+      selPortfolio.title = 'Portfólio não aplicável para a vertical ' + vertical;
+    }
+  }
+
   var preenchidos = [vertical, portfolio, userNames.length ? '1' : ''].filter(Boolean).length;
-  var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
+  var verticalPermiteSozinha = vertical && (vLower === 'saúde' || vLower === 'educação');
+  
   if (preenchidos < 2 && !verticalPermiteSozinha) {
    if (!silencioso) {
       document.getElementById('results').innerHTML =
@@ -667,12 +659,15 @@ function buscar(silencioso) {
   if (vertical)           params.set('vertical',  vertical);
   if (portfolio)          params.set('portfolio', portfolio);
   if (userNames.length)   params.set('users',     userNames.join(','));
-  if (tiposSelected.size > 0) params.set('typeIds', [...tiposSelected].join(','));
+  
+  var arrTypeKeys = [];
+  tiposSelected.forEach(function(k) { arrTypeKeys.push(k); });
+  if (arrTypeKeys.length > 0) params.set('typeIds', arrTypeKeys.join(','));
+  
   var days = document.getElementById('sel-days').value;
   if (days && days !== '0') params.set('days', days);
 
   if (!silencioso) {
-    // Busca manual: reseta baseline e ordenação para o novo conjunto de resultados
     knownIssues = {};
     sortState.col = null;
     sortState.dir = 'asc';
@@ -683,7 +678,7 @@ function buscar(silencioso) {
     limparBanners();
   }
 
-  fetch('/api/chamados?' + params.toString())
+  fetch('/api/chamados?' + params.toString(), { signal: buscarController.signal })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
@@ -691,7 +686,6 @@ function buscar(silencioso) {
       renderResults(data, userNames);
 
       if (silencioso) {
-        // Só no refresh automático: compara com baseline e exibe banners se houver novidades
         limparBanners();
         try { detectarNovidades(data); } catch(e) { console.warn('[novidades] erro:', e); }
       }
@@ -704,11 +698,16 @@ function buscar(silencioso) {
         pedirPermissaoNotificacao();
         iniciarPolling();
       } else {
-        // Atualiza config da subscription WebPush se filtros mudaram
         agendarProximoRefresh();
       }
     })
     .catch(function(err) {
+      if (err.name === 'AbortError') {
+        if (silencioso && buscaAtiva) { 
+          agendarProximoRefresh(); 
+        }
+        return; 
+      }
       if (!silencioso) {
         document.getElementById('results').innerHTML =
           '<div class="state"><div class="state-icon">⚠️</div><strong>Erro ao buscar:</strong> ' + escHtml(err.message) + '</div>';
@@ -716,14 +715,12 @@ function buscar(silencioso) {
       if (buscaAtiva) {
         agendarProximoRefresh();
       } else if (!silencioso) {
-        // Primeira busca falhou: ainda assim inicia o polling para tentar de novo
         buscaAtiva = true;
         iniciarPolling();
       }
     });
 }
 
-// Auto-search ao alterar qualquer filtro
 document.getElementById('sel-vertical').addEventListener('change', function() {
   var v = this.value.toLowerCase();
   var selPortfolio = document.getElementById('sel-portfolio');
@@ -740,7 +737,6 @@ document.getElementById('sel-vertical').addEventListener('change', function() {
 document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
 document.getElementById('sel-days').addEventListener('change', function() { if (buscaAtiva) buscar(); });
 
-// Enter no campo responsável (quando lista fechada)
 inpUser.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
 });
@@ -780,7 +776,6 @@ function priBadge(p) {
   return '<span class="pri-badge pri-' + n + '">P' + n + '</span>';
 }
 
-// Abrevia o nome do portfólio para exibição na tabela
 function abrevPortfolio(p) {
   if (!p) return '—';
   return escHtml(p.replace('Portfólio ', ''));
@@ -793,11 +788,8 @@ function fmtDate(iso) {
          d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 }
 
-// Estado de ordenação atual
 var sortState = { col: null, dir: 'asc' };
-
 var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'assignee', 'status', 'priority', 'type', 'updated'];
-
 var PRIORITY_ORDER = { 'Highest': 1, 'High': 2, 'Medium': 3, 'Low': 4, 'Lowest': 5 };
 
 function sortIssues(issues, col, dir) {
@@ -851,7 +843,6 @@ function renderTable(issues, tableId, showTempoFila) {
     '<tbody>' + rows + '</tbody></table></div>';
 }
 
-// Armazena issues por seção para re-renderizar ao ordenar
 var _lastData = null;
 var _lastUser = null;
 
@@ -866,7 +857,6 @@ function onSort(tableId, col) {
 }
 
 function renderResults(data, userKey) {
-  // Salva para re-renderizar ao ordenar
   _lastData = data;
   _lastUser = userKey;
 
@@ -881,7 +871,6 @@ function renderResults(data, userKey) {
   document.getElementById('chip-mine').textContent       = data.totalAssigned   != null ? data.totalAssigned   : assigned.length;
   document.getElementById('chips').style.display         = 'flex';
 
-  // Aviso quando alguma seção está truncada no limite de 100
   var avisos = [];
   if (data.totalUnassigned > unassigned.length)
     avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
@@ -908,18 +897,15 @@ function atualizarKnownIssues(data) {
   all.forEach(function(i) {
     knownIssues[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
-  // Persiste baseline para detectar novidades após período com aba fechada/oculta
 }
 
 // ── NOTIFICAÇÕES NATIVAS ──────────────────────────────────────────────────────
-// ── SERVICE WORKER + WebPush ──────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function(err) {
     console.warn('[SW] Falha ao registrar:', err);
   });
 }
 
-// ── Badge de notificação no header ───────────────────────────────────────────
 function atualizarBadgeNotif() {
   var btn = document.getElementById('notif-btn');
   if (!btn || !('Notification' in window)) return;
@@ -972,7 +958,6 @@ function enviarBoasVindas() {
     + '• Novos chamados sem responsável\n'
     + (nomes.length ? '• Atualizações nos chamados de ' + nomes.join(', ') : '• Atualizações nos chamados atribuídos');
   notificar('✅ Alertas ativados — Chamados por Vertical', corpo, 'boas-vindas');
-  // Registra subscription WebPush para notificações mesmo com o site fechado
 }
 
 function notificar(titulo, corpo, tag) {
@@ -994,12 +979,11 @@ function notificar(titulo, corpo, tag) {
   }
 }
 
-// Inicializa badge assim que a página carrega
 atualizarBadgeNotif();
 
 // ── MULTI-USER TAGS ──────────────────────────────────────────────────────────
 function adicionarUserTag(u) {
-  if (selectedUsers.some(function(x) { return x.name === u.name; })) return; // evita duplicata
+  if (selectedUsers.some(function(x) { return x.name === u.name; })) return;
   selectedUsers.push(u);
   renderUserTags();
 }
@@ -1020,18 +1004,19 @@ function renderUserTags() {
       '<span class="tag-x" onclick="removerUserTag(\'' + escHtml(u.name) + '\')" title="Remover">×</span>';
     container.appendChild(tag);
   });
-  // Placeholder dinâmico
   document.getElementById('inp-user').placeholder = selectedUsers.length ? 'Adicionar...' : 'Adicionar responsável...';
 }
 
 // ── FILTROS PERSISTENTES ──────────────────────────────────────────────────────
 function salvarFiltros() {
   try {
+    var arrTypeKeys = [];
+    tiposSelected.forEach(function(k) { arrTypeKeys.push(k); });
     localStorage.setItem('filtros_v2', JSON.stringify({
       portfolio: document.getElementById('sel-portfolio').value,
       vertical:  document.getElementById('sel-vertical').value,
       days:      document.getElementById('sel-days').value,
-      tipos:     [...tiposSelected],
+      tipos:     arrTypeKeys,
       users:     selectedUsers,
     }));
   } catch(e) {}
@@ -1049,6 +1034,7 @@ function restaurarFiltros() {
       selPortfolio.value    = '';
       selPortfolio.disabled = true;
       selPortfolio.title    = 'Portfólio não aplicável para a vertical ' + f.vertical;
+      f.portfolio           = ''; 
     } else {
       if (f.portfolio) selPortfolio.value = f.portfolio;
     }
@@ -1075,27 +1061,23 @@ function atualizarBadgeTitulo(delta) {
     : 'Chamados por Vertical — Betha Sistemas';
 }
 
-// ── WAKE LOCK — impede que o navegador suspenda a aba ────────────────────────
+// ── WAKE LOCK ─────────────────────────────────────────────────────────────────
 var wakeLock = null;
 
 async function ativarWakeLock() {
   if (!('wakeLock' in navigator)) return;
   try {
     wakeLock = await navigator.wakeLock.request('screen');
-  } catch(e) { /* permissão negada ou não suportado — sem problema */ }
+  } catch(e) {}
 }
 
-// A Wake Lock é liberada automaticamente quando a aba fica oculta;
-// reativa quando a aba volta ao foco.
 document.addEventListener('visibilitychange', function() {
   if (!document.hidden && buscaAtiva) {
     ativarWakeLock();
-    // Reseta contador de título ao voltar ao foco
     pendingCount = 0;
     document.title = 'Chamados por Vertical — Betha Sistemas';
   }
 });
-
 
 // ── TEMPO NA FILA ─────────────────────────────────────────────────────────────
 function tempoRelativo(iso) {
@@ -1118,17 +1100,16 @@ function tempoFilaBadge(iso) {
 function iniciarPolling() {
   document.getElementById('refresh-bar').style.display = 'flex';
   ativarWakeLock();
-  // Cria o Web Worker uma única vez — ele sobrevive mesmo com a aba em background
   if (!timerWorker) {
     timerWorker = new Worker('/timer-worker.js');
     timerWorker.onmessage = function(e) {
       var gen = e.data.gen;
       if (e.data.type === 'tick') {
-        if (gen !== timerGeneration) return; // tick de ciclo anterior — ignora
+        if (gen !== timerGeneration) return;
         refreshCountdown = e.data.remaining;
         atualizarBarraRefresh();
       } else if (e.data.type === 'done') {
-        if (gen !== timerGeneration) return; // done stale — ignora
+        if (gen !== timerGeneration) return;
         document.getElementById('refresh-label').textContent = 'Atualizando...';
         document.getElementById('refresh-dot').classList.remove('pulsing');
         buscar(true);
@@ -1139,7 +1120,7 @@ function iniciarPolling() {
 }
 
 function pararPolling() {
-  timerGeneration++; // invalida qualquer tick/done em voo do ciclo anterior
+  timerGeneration++;
   if (timerWorker) { timerWorker.postMessage({ cmd: 'stop' }); }
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
   var bar = document.getElementById('refresh-bar');
@@ -1165,19 +1146,17 @@ function atualizarBarraRefresh() {
 
 // ── DETECÇÃO DE NOVIDADES ─────────────────────────────────────────────────────
 function detectarNovidades(data) {
-  if (Object.keys(knownIssues).length === 0) return; // sem baseline ainda
+  if (Object.keys(knownIssues).length === 0) return;
 
   var unassigned = data.unassigned || [];
   var assigned   = data.assigned   || [];
 
-  // Novos sem responsável: completamente novo OU estava atribuído e voltou para a fila
   var novosUnassigned = unassigned.filter(function(i) {
     var prev = knownIssues[i.key];
     return !prev || prev.assignee !== null;
   });
   var novosUnassignedKeys = new Set(novosUnassigned.map(function(i) { return i.key; }));
 
-  // Mudança de status em chamados atribuídos
   var statusAlterado = assigned.filter(function(i) {
     var prev = knownIssues[i.key];
     return prev && prev.status !== i.status;
@@ -1186,7 +1165,6 @@ function detectarNovidades(data) {
   });
   var statusAlteradoKeys = new Set(statusAlterado.map(function(i) { return i.key; }));
 
-  // Movimentação (updated mudou, status igual) — exclui tickets já cobertos acima
   var all = unassigned.concat(assigned);
   var movimentados = all.filter(function(i) {
     if (novosUnassignedKeys.has(i.key) || statusAlteradoKeys.has(i.key)) return false;
@@ -1194,8 +1172,6 @@ function detectarNovidades(data) {
     return prev && prev.status === i.status && prev.updated !== i.updated;
   });
 
-  // Tickets atribuídos que sumiram dos resultados — verifica via API se foram encerrados
-  // Guarda: só verifica se os resultados não estão truncados (evita falso positivo com >100 atribuídos)
   var currentKeys = new Set(all.map(function(i) { return i.key; }));
   var resultadosTruncados = data.totalAssigned > assigned.length;
   var desaparecidos = resultadosTruncados ? [] : Object.keys(knownIssues).filter(function(key) {

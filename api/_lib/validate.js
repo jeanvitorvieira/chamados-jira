@@ -37,13 +37,6 @@ function escapeJqlValue(value) {
 }
 
 /**
- * Valida e sanitiza os parâmetros de busca recebidos da query string.
- * Retorna os valores seguros ou lança ValidationError.
- *
- * @param {{ vertical?: string, portfolio?: string, user?: string }} params
- * @returns {{ vertical: string|null, portfolio: string|null, user: string|null }}
- */
-/**
  * Sanitiza a lista de tipos recebida como string CSV.
  * Cada valor é escapado para uso seguro no JQL.
  * Limite de 50 tipos por requisição para evitar JQL excessivamente longo.
@@ -74,23 +67,39 @@ function validateDays(daysParam) {
   return DIAS_VALIDOS.has(n) ? n : 0;
 }
 
+/**
+ * Valida e sanitiza os parâmetros de busca recebidos da query string.
+ * Retorna os valores seguros ou lança ValidationError.
+ *
+ * @param {{ vertical?: string, portfolio?: string, user?: string }} params
+ * @returns {{ vertical: string|null, portfolio: string|null, user: string|null }}
+ */
 function validateSearchParams({ vertical, portfolio, user }) {
-  // Vertical: deve estar na lista fechada
+  // 1. Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
     if (!VERTICAIS_VALIDAS.has(vertical)) {
       throw new ValidationError(`Vertical inválida: "${vertical}"`);
     }
   }
 
-  // Portfólio: deve estar na lista fechada
+  // 2. Portfólio: deve estar na lista fechada
   if (portfolio !== undefined && portfolio !== '') {
     if (!PORTFOLIOS_VALIDOS.has(portfolio)) {
       throw new ValidationError(`Portfólio inválido: "${portfolio}"`);
     }
   }
 
-  // Usuário: aceita qualquer string, mas escapa para uso no JQL
-  // e limita o comprimento para evitar abuso
+  // ── CORREÇÃO DE SEGURANÇA NO BACK-END ──────────────────────────────────
+  // Replicando a regra do Front-end: Saúde e Educação NÃO possuem portfólio.
+  // Se tentarem injetar via API externa, nós limpamos/ignoramos o parâmetro.
+  let safePortfolio = portfolio || null;
+  const vLower = (vertical || '').toLowerCase();
+  if (vLower === 'saúde' || vLower === 'educação') {
+    safePortfolio = null; 
+  }
+  // ───────────────────────────────────────────────────────────────────────
+
+  // 3. Usuário: aceita qualquer string, mas escapa para uso no JQL
   let safeUser = null;
   if (user && user.trim().length > 0) {
     if (user.length > 200) {
@@ -101,7 +110,7 @@ function validateSearchParams({ vertical, portfolio, user }) {
 
   return {
     vertical:  vertical || null,
-    portfolio: portfolio || null,
+    portfolio: safePortfolio, // Usa a variável tratada contra bypass
     user:      safeUser,
   };
 }
@@ -122,14 +131,6 @@ function validateUserQuery(q) {
   return q.trim();
 }
 
-/** Erro de validação de parâmetros de entrada. */
-class ValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
-
 /**
  * Valida e sanitiza uma lista de usuários (suporte a múltiplos responsáveis).
  * @param {string|undefined} usersParam - CSV ex: "joao.silva,maria.costa"
@@ -143,6 +144,14 @@ function validateUsers(usersParam) {
     .slice(0, 10)
     .filter(u => u.length <= 200)
     .map(u => escapeJqlValue(u));
+}
+
+/** Erro de validação de parâmetros de entrada. */
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ValidationError';
+  }
 }
 
 module.exports = {
