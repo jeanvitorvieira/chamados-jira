@@ -230,7 +230,7 @@
       <!-- Novo Filtro de Equipe Responsável integrado no Grid principal -->
       <div class="form-group">
         <label>Equipe Responsável</label>
-        <select id="sel-team">
+        <select id="sel-equipe">
           <option value="">Todas as equipes</option>
           <option value="Suporte">Suporte</option>
           <option value="Serviço">Serviço</option>
@@ -629,7 +629,7 @@ function buscar(silencioso) {
 
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
-  var team      = document.getElementById('sel-team').value; // Novo Filtro capturado
+  var equipe      = document.getElementById('sel-equipe').value; // Novo Filtro capturado
   var userNames = selectedUsers.map(function(u) { return u.name; });
 
   // Bloqueia se digitou algo no campo responsável mas não selecionou da lista
@@ -658,7 +658,7 @@ function buscar(silencioso) {
   }
 
   // O filtro de equipes agora entra no peso dos filtros preenchidos
-  var preenchidos = [vertical, portfolio, team, userNames.length ? '1' : ''].filter(Boolean).length;
+  var preenchidos = [vertical, portfolio, equipe, userNames.length ? '1' : ''].filter(Boolean).length;
   var verticalPermiteSozinha = vertical && (vLower === 'saúde' || vLower === 'educação');
   
   if (preenchidos < 2 && !verticalPermiteSozinha) {
@@ -675,7 +675,7 @@ function buscar(silencioso) {
   var params = new URLSearchParams();
   if (vertical)           params.set('vertical',  vertical);
   if (portfolio)          params.set('portfolio', portfolio);
-  if (team)               params.set('team',      team); // Novo filtro enviado
+  if (equipe)               params.set('equipe',      equipe); // Novo filtro enviado
   if (userNames.length)   params.set('users',     userNames.join(','));
   
   var arrTypeKeys = [];
@@ -754,7 +754,7 @@ document.getElementById('sel-vertical').addEventListener('change', function() {
   buscar();
 });
 document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
-document.getElementById('sel-team').addEventListener('change', function() { buscar(); }); // Escuta nova de Equipe
+document.getElementById('sel-equipe').addEventListener('change', function() { buscar(); }); // Escuta nova de Equipe
 document.getElementById('sel-days').addEventListener('change', function() { if (buscaAtiva) buscar(); });
 
 inpUser.addEventListener('keydown', function(e) {
@@ -1035,7 +1035,7 @@ function salvarFiltros() {
     localStorage.setItem('filtros_v2', JSON.stringify({
       portfolio: document.getElementById('sel-portfolio').value,
       vertical:  document.getElementById('sel-vertical').value,
-      team:      document.getElementById('sel-team').value, // Nova persistência de Equipe
+      equipe:      document.getElementById('sel-equipe').value, // Nova persistência de Equipe
       days:      document.getElementById('sel-days').value,
       tipos:     arrTypeKeys,
       users:     selectedUsers,
@@ -1061,7 +1061,7 @@ function restaurarFiltros() {
       if (f.portfolio) selPortfolio.value = f.portfolio;
     }
     
-    if (f.team)      document.getElementById('sel-team').value      = f.team; // Restaurando Equipe
+    if (f.equipe)      document.getElementById('sel-equipe').value      = f.equipe; // Restaurando Equipe
     if (f.days)      document.getElementById('sel-days').value      = f.days;
     if (f.users && f.users.length) {
       f.users.forEach(function(u) { adicionarUserTag(u); });
@@ -1070,10 +1070,10 @@ function restaurarFiltros() {
 
     var portfolio = document.getElementById('sel-portfolio').value;
     var vertical  = document.getElementById('sel-vertical').value;
-    var team      = document.getElementById('sel-team').value; // Nova validação na restauração
+    var equipe      = document.getElementById('sel-equipe').value; // Nova validação na restauração
     var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
     
-    var preenchidos = [portfolio, vertical, team, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+    var preenchidos = [portfolio, vertical, equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
     if (preenchidos >= 2 || verticalPermiteSozinha) pendingAutoSearch = true;
   } catch(e) {}
 }

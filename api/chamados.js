@@ -98,34 +98,6 @@ module.exports = async function handler(req, res) {
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 /**
- * Constrói JQL estruturado incluindo o novo filtro de equipe responsável.
- */
-function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
-  const clauses = ['statusCategory != Done'];
-
-  if (selectedTypeIds && selectedTypeIds.length > 0) {
-    clauses.push(`issuetype in (${selectedTypeIds.join(', ')})`);
-  } else if (selectedTypes && selectedTypes.length > 0) {
-    clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
-  }
-
-  if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
-  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (equipe)      clauses.push(`cf[21500] = "${equipe}"`); // Equipe Responsável
-  if (days > 0)  clauses.push(`updated >= -${days}d`);
-
-  if (mode === 'assigned' && users.length > 0) {
-    clauses.push(users.length === 1
-      ? `assignee = "${users[0]}"`
-      : `assignee in (${users.map(u => `"${u}"`).join(', ')})`);
-  } else {
-    clauses.push('assignee is EMPTY');
-  }
-
-  return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC';
-}
-
-/**
  * Constrói JQL para uma das duas queries independentes.
  * Prefere filtrar por ID numérico (typeIds) para cobrir tipos homônimos;
  * cai no filtro por nome (types) como fallback.
