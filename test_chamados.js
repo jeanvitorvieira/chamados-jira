@@ -70,7 +70,12 @@ function swBuildParams(config) {
 
 // ── Mock validação de filtros (página) ───────────────────────────
 function preenchidos(vertical, portfolio, userNames) {
-  return [vertical, portfolio, userNames.length ? '1' : ''].filter(Boolean).length;
+  let safePortfolio = portfolio;
+  const vLower = (vertical || '').toLowerCase();
+  if (vLower === 'saúde' || vLower === 'educação') {
+    safePortfolio = ''; // Força a neutralização do portfólio
+  }
+  return [vertical, safePortfolio, userNames.length ? '1' : ''].filter(Boolean).length;
 }
 
 // ── Mock dedup autocomplete ───────────────────────────────────────
@@ -640,6 +645,73 @@ test('Bug 1: refresh silencioso com erro apenas reagenda (não reinicia worker)'
   onError(new Error('timeout'), true);
   assert(reagendado, 'deve reagendar no erro silencioso');
   assert(!workerReiniciado, 'não deve reiniciar worker em refresh silencioso');
+});
+
+// ── Testes de Regra de Negócio Cruzada (Bypass do Inspecionar) ──
+
+test('Segurança: se vertical for Saúde, portfólio é forçado a vazio e preenchidos ignora o campo', () => {
+  const vertical = 'Saúde';
+  const portfolio = 'Portfólio Pequenas Contas'; // Usuário burlou e injetou
+  const userNames = [];
+  
+  const count = preenchidos(vertical, portfolio, userNames);
+  // Deve contar apenas 1 (a vertical), pois o portfólio precisa ser limpo
+  eq(count, 1, 'Portfólio malicioso deve ser ignorado em verticais de Saúde');
+});
+
+test('Segurança: se vertical for Educação, portfólio é forçado a vazio e preenchidos ignora o campo', () => {
+  const vertical = 'Educação';
+  const portfolio = 'Portfólio SC/MG';
+  const userNames = ['jean.vieira'];
+  
+  const count = preenchidos(vertical, portfolio, userNames);
+  // Deve contar 2 (vertical + responsável), ignorando o portfólio injetado
+  eq(count, 2, 'Portfólio malicioso deve ser ignorado em verticais de Educação');
+});
+
+test('Segurança: portfólio é mantido normalmente para verticais comuns (ex: Contábil)', () => {
+  const vertical = 'Contábil';
+  const portfolio = 'Portfólio Médias Contas';
+  const userNames = [];
+  
+  const count = preenchidos(vertical, portfolio, userNames);
+  eq(count, 2, 'Portfólio deve ser computado normalmente para a vertical Contábil');
+});
+
+// ── Testes do Fluxo de Cancelamento de Requests (AbortController) ──
+
+function mockCatchTratamentoErro(err, silencioso, buscaAtiva) {
+  let reagendado = false;
+  let erroExibido = false;
+
+  // Lógica exata implementada no catch do fetch do front-end
+  if (err.name === 'AbortError') {
+    if (silencioso && buscaAtiva) {
+      reagendado = true; // agendarProximoRefresh()
+    }
+    return { reagendado, erroExibido };
+  }
+
+  if (!silencioso) erroExibido = true;
+  if (buscaAtiva) reagendado = true;
+  
+  return { reagendado, erroExibido };
+}
+
+test('AbortController: AbortError silencioso com busca ativa mantém o polling vivo', () => {
+  const error = { name: 'AbortError' };
+  const r = mockCatchTratamentoErro(error, true, true); // silencioso=true, buscaAtiva=true
+  
+  assert(r.reagendado, 'Polling silencioso deve agendar o próximo ciclo ao ser abortado');
+  assert(!r.erroExibido, 'AbortError não deve estourar erro visual para o usuário');
+});
+
+test('AbortController: AbortError em busca manual apenas interrompe a execução sem alertar erro', () => {
+  const error = { name: 'AbortError' };
+  const r = mockCatchTratamentoErro(error, false, true); // silencioso=false (manual)
+  
+  assert(!r.reagendado, 'Busca manual abortada não deve auto-reagendar duplicado');
+  assert(!r.erroExibido, 'Busca manual interrompida por outro clique rápido não deve exibir banner de erro');
 });
 
 // ─── Executa ────────────────────────────────────────────────────────
