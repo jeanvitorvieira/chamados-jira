@@ -34,7 +34,7 @@ module.exports = async function handler(req, res) {
   try {
     params = validateSearchParams(req.query);
   } catch (err) {
-    if (err instanceof ValidationError) {
+    if (err instanceof ValidationError || err.name === 'ValidationError') {
       return res.status(400).json({ ok: false, error: err.message, code: 'INVALID_PARAMS' });
     }
     throw err;
