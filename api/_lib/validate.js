@@ -25,6 +25,14 @@ const PORTFOLIOS_VALIDOS = new Set([
   'Portfólio SC/SP',
 ]);
 
+/** Equipes permitidas — valores confirmados no Jira. */
+const EQUIPES_VALIDAS = new Set([
+  'Equipe Alfa',
+  'Equipe Beta',
+  'Equipe Gama',
+  'Equipe Delta',
+]);
+
 /**
  * Escapa aspas duplas em um valor destinado a ser usado dentro de
  * aspas duplas no JQL. Ex: `cf[10300] = "valor escapado"`.
@@ -71,10 +79,10 @@ function validateDays(daysParam) {
  * Valida e sanitiza os parâmetros de busca recebidos da query string.
  * Retorna os valores seguros ou lança ValidationError.
  *
- * @param {{ vertical?: string, portfolio?: string, user?: string }} params
- * @returns {{ vertical: string|null, portfolio: string|null, user: string|null }}
+ * @param {{ vertical?: string, portfolio?: string, user?: string, team?: string }} params
+ * @returns {{ vertical: string|null, portfolio: string|null, user: string|null, team: string|null }}
  */
-function validateSearchParams({ vertical, portfolio, user }) {
+function validateSearchParams({ vertical, portfolio, user, team }) {
   // 1. Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
     if (!VERTICAIS_VALIDAS.has(vertical)) {
@@ -89,6 +97,13 @@ function validateSearchParams({ vertical, portfolio, user }) {
     }
   }
 
+  // 3. Equipe Responsável: deve estar na lista fechada
+  if (team !== undefined && team !== '') {
+    if (!EQUIPES_VALIDAS.has(team)) {
+      throw new ValidationError(`Equipe inválida: "${team}"`);
+    }
+  }
+
   // ── CORREÇÃO DE SEGURANÇA NO BACK-END ──────────────────────────────────
   // Replicando a regra do Front-end: Saúde e Educação NÃO possuem portfólio.
   // Se tentarem injetar via API externa, nós limpamos/ignoramos o parâmetro.
@@ -99,7 +114,7 @@ function validateSearchParams({ vertical, portfolio, user }) {
   }
   // ───────────────────────────────────────────────────────────────────────
 
-  // 3. Usuário: aceita qualquer string, mas escapa para uso no JQL
+  // 4. Usuário: aceita qualquer string, mas escapa para uso no JQL
   let safeUser = null;
   if (user && user.trim().length > 0) {
     if (user.length > 200) {
@@ -110,8 +125,9 @@ function validateSearchParams({ vertical, portfolio, user }) {
 
   return {
     vertical:  vertical || null,
-    portfolio: safePortfolio, // Usa a variável tratada contra bypass
+    portfolio: safePortfolio,
     user:      safeUser,
+    team:      team || null,
   };
 }
 
@@ -164,4 +180,5 @@ module.exports = {
   TIPOS_PERMITIDOS,
   VERTICAIS_VALIDAS,
   PORTFOLIOS_VALIDOS,
+  EQUIPES_VALIDAS,
 };

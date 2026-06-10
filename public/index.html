@@ -49,8 +49,12 @@
   .filter-card { background: var(--white); border-radius: var(--radius); border: 1.5px solid var(--gray-border); box-shadow: var(--shadow-sm); padding: 20px 24px; margin-bottom: 24px; }
   .filter-card h2 { font-size: 15px; font-weight: 700; color: var(--blue-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .filter-card h2::before { content: ''; display: inline-block; width: 4px; height: 18px; border-radius: 2px; background: var(--orange); }
-  .filters-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: end; }
-  @media (max-width: 700px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
+  
+  /* Grid atualizado para comportar 4 colunas harmoniosamente */
+  .filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; }
+  @media (max-width: 950px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 550px) { .filters-grid { grid-template-columns: 1fr; } }
+
   .form-group { display: flex; flex-direction: column; gap: 5px; }
   .form-group label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
   .form-group select, .form-group input { border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); outline: none; transition: border-color .15s; width: 100%; }
@@ -222,6 +226,18 @@
           <option value="Saúde">Saúde</option>
         </select>
       </div>
+      
+      <!-- Novo Filtro de Equipe Responsável integrado no Grid principal -->
+      <div class="form-group">
+        <label>Equipe Responsável</label>
+        <select id="sel-team">
+          <option value="">Todas as equipes</option>
+          <option value="Suporte">Suporte</option>
+          <option value="Serviço">Serviço</option>
+          <option value="Produto">Produto</option>
+        </select>
+      </div>
+
       <div class="form-group">
         <label>Responsável</label>
         <div class="autocomplete-wrap">
@@ -580,10 +596,8 @@ function atualizarTipoLabel() {
     var badge = btn.querySelector('.multiselect-badge');
     if (badge) badge.remove();
   } else {
-    var arrKeys = Array.from ? Array.from(tiposSelected) : [];
-    if (!arrKeys.length) {
-      tiposSelected.forEach(function(k) { arrKeys.push(k); });
-    }
+    var arrKeys = [];
+    tiposSelected.forEach(function(k) { arrKeys.push(k); });
     var nomes = arrKeys.map(function(k) { return tiposNomeMap[k] || k; });
     label.textContent = tiposSelected.size === 1
       ? nomes[0]
@@ -609,14 +623,16 @@ document.addEventListener('click', function(e) {
 // ── BUSCA ────────────────────────────────────────────────────────────────────
 function buscar(silencioso) {
   if (buscarController) {
-    buscarController.abort();
+    buscarController.abort(); // Cancela a busca anterior se ela ainda estiver rodando
   }
   buscarController = new AbortController();
 
   var vertical  = document.getElementById('sel-vertical').value;
   var portfolio = document.getElementById('sel-portfolio').value;
+  var team      = document.getElementById('sel-team').value; // Novo Filtro capturado
   var userNames = selectedUsers.map(function(u) { return u.name; });
 
+  // Bloqueia se digitou algo no campo responsável mas não selecionou da lista
   if (inpUser.value.trim()) {
     if (!silencioso) {
       inpUser.classList.add('inp-warn');
@@ -641,7 +657,8 @@ function buscar(silencioso) {
     }
   }
 
-  var preenchidos = [vertical, portfolio, userNames.length ? '1' : ''].filter(Boolean).length;
+  // O filtro de equipes agora entra no peso dos filtros preenchidos
+  var preenchidos = [vertical, portfolio, team, userNames.length ? '1' : ''].filter(Boolean).length;
   var verticalPermiteSozinha = vertical && (vLower === 'saúde' || vLower === 'educação');
   
   if (preenchidos < 2 && !verticalPermiteSozinha) {
@@ -649,7 +666,7 @@ function buscar(silencioso) {
       document.getElementById('results').innerHTML =
         '<div class="state"><div class="state-icon">⚠️</div>' +
         'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
-       '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
+       '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical, Equipe e/ou Responsável.</span></div>';
      document.getElementById('chips').style.display = 'none';
    } else if (buscaAtiva) { agendarProximoRefresh(); }
   return;
@@ -658,6 +675,7 @@ function buscar(silencioso) {
   var params = new URLSearchParams();
   if (vertical)           params.set('vertical',  vertical);
   if (portfolio)          params.set('portfolio', portfolio);
+  if (team)               params.set('team',      team); // Novo filtro enviado
   if (userNames.length)   params.set('users',     userNames.join(','));
   
   var arrTypeKeys = [];
@@ -721,6 +739,7 @@ function buscar(silencioso) {
     });
 }
 
+// Auto-search ao alterar qualquer filtro
 document.getElementById('sel-vertical').addEventListener('change', function() {
   var v = this.value.toLowerCase();
   var selPortfolio = document.getElementById('sel-portfolio');
@@ -735,6 +754,7 @@ document.getElementById('sel-vertical').addEventListener('change', function() {
   buscar();
 });
 document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
+document.getElementById('sel-team').addEventListener('change', function() { buscar(); }); // Escuta nova de Equipe
 document.getElementById('sel-days').addEventListener('change', function() { if (buscaAtiva) buscar(); });
 
 inpUser.addEventListener('keydown', function(e) {
@@ -1015,6 +1035,7 @@ function salvarFiltros() {
     localStorage.setItem('filtros_v2', JSON.stringify({
       portfolio: document.getElementById('sel-portfolio').value,
       vertical:  document.getElementById('sel-vertical').value,
+      team:      document.getElementById('sel-team').value, // Nova persistência de Equipe
       days:      document.getElementById('sel-days').value,
       tipos:     arrTypeKeys,
       users:     selectedUsers,
@@ -1028,6 +1049,7 @@ function restaurarFiltros() {
     if (!saved) return;
     var f = JSON.parse(saved);
     if (f.vertical)  document.getElementById('sel-vertical').value  = f.vertical;
+    
     var v = (f.vertical || '').toLowerCase();
     var selPortfolio = document.getElementById('sel-portfolio');
     if (v === 'saúde' || v === 'educação') {
@@ -1038,6 +1060,8 @@ function restaurarFiltros() {
     } else {
       if (f.portfolio) selPortfolio.value = f.portfolio;
     }
+    
+    if (f.team)      document.getElementById('sel-team').value      = f.team; // Restaurando Equipe
     if (f.days)      document.getElementById('sel-days').value      = f.days;
     if (f.users && f.users.length) {
       f.users.forEach(function(u) { adicionarUserTag(u); });
@@ -1046,8 +1070,10 @@ function restaurarFiltros() {
 
     var portfolio = document.getElementById('sel-portfolio').value;
     var vertical  = document.getElementById('sel-vertical').value;
+    var team      = document.getElementById('sel-team').value; // Nova validação na restauração
     var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
-    var preenchidos = [portfolio, vertical, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+    
+    var preenchidos = [portfolio, vertical, team, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
     if (preenchidos >= 2 || verticalPermiteSozinha) pendingAutoSearch = true;
   } catch(e) {}
 }
