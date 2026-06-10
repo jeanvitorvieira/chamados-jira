@@ -20,7 +20,7 @@ const FIELDS = [
   'updated',
   'customfield_32400', // Portfólio de Atendimento
   'customfield_10300', // Vertical
-  'customfield_10400', // Equipe Responsável (Ajuste o ID numérico conforme seu Jira)
+  'customfield_21500', // Equipe Responsável (Ajuste o ID numérico conforme seu Jira)
 ];
 
 module.exports = async function handler(req, res) {
@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
   }
 
-  // 1. Valida e sanitiza parâmetros de entrada (req.query contém o parâmetro 'team')
+  // 1. Valida e sanitiza parâmetros de entrada (req.query contém o parâmetro 'equipe')
   let params;
   try {
     params = validateSearchParams(req.query);
@@ -100,7 +100,7 @@ module.exports = async function handler(req, res) {
 /**
  * Constrói JQL estruturado incluindo o novo filtro de equipe responsável.
  */
-function buildJql({ vertical, portfolio, team }, users, selectedTypeIds, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
   if (selectedTypeIds && selectedTypeIds.length > 0) {
@@ -111,7 +111,7 @@ function buildJql({ vertical, portfolio, team }, users, selectedTypeIds, selecte
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (team)      clauses.push(`cf[10400] = "${team}"`); // Equipe Responsável
+  if (equipe)      clauses.push(`cf[21500] = "${equipe}"`); // Equipe Responsável
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
@@ -131,7 +131,7 @@ function buildJql({ vertical, portfolio, team }, users, selectedTypeIds, selecte
  * cai no filtro por nome (types) como fallback.
  * @param {'unassigned'|'assigned'} mode
  */
-function buildJql({ vertical, portfolio, team }, users, selectedTypeIds, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
   if (selectedTypeIds && selectedTypeIds.length > 0) {
@@ -142,7 +142,7 @@ function buildJql({ vertical, portfolio, team }, users, selectedTypeIds, selecte
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (team)      clauses.push(`cf[10400] = "${team}"`); // Equipe Responsável
+  if (equipe)      clauses.push(`cf[21500] = "${equipe}"`); // Equipe Responsável
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
@@ -177,7 +177,7 @@ function mapIssue(raw) {
     created:   f.created,
     vertical:  f.customfield_10300?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
-    team:      f.customfield_10400?.value ?? null, // Mapeia equipe para o DTO de saída
+    equipe:      f.customfield_21500?.value ?? null, // Mapeia equipe para o DTO de saída
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,
   };
 }

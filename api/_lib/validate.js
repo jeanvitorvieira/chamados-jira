@@ -79,10 +79,10 @@ function validateDays(daysParam) {
  * Valida e sanitiza os parâmetros de busca recebidos da query string.
  * Retorna os valores seguros ou lança ValidationError.
  *
- * @param {{ vertical?: string, portfolio?: string, user?: string, team?: string }} params
- * @returns {{ vertical: string|null, portfolio: string|null, user: string|null, team: string|null }}
+ * @param {{ vertical?: string, portfolio?: string, user?: string, equipe?: string }} params
+ * @returns {{ vertical: string|null, portfolio: string|null, user: string|null, equipe: string|null }}
  */
-function validateSearchParams({ vertical, portfolio, user, team }) {
+function validateSearchParams({ vertical, portfolio, user, equipe }) {
   // 1. Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
     if (!VERTICAIS_VALIDAS.has(vertical)) {
@@ -98,9 +98,9 @@ function validateSearchParams({ vertical, portfolio, user, team }) {
   }
 
   // 3. Equipe Responsável: deve estar na lista fechada
-  if (team !== undefined && team !== '') {
-    if (!EQUIPES_VALIDAS.has(team)) {
-      throw new ValidationError(`Equipe inválida: "${team}"`);
+  if (equipe !== undefined && equipe !== '') {
+    if (!EQUIPES_VALIDAS.has(equipe)) {
+      throw new ValidationError(`Equipe inválida: "${equipe}"`);
     }
   }
 
@@ -127,7 +127,7 @@ function validateSearchParams({ vertical, portfolio, user, team }) {
     vertical:  vertical || null,
     portfolio: safePortfolio,
     user:      safeUser,
-    team:      team || null,
+    equipe:      equipe || null,
   };
 }
 
