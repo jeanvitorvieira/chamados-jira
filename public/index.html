@@ -55,6 +55,7 @@
   .form-group label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
   .form-group select, .form-group input { border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; color: var(--text-primary); background: var(--white); outline: none; transition: border-color .15s; width: 100%; }
   .form-group select:focus, .form-group input:focus { border-color: var(--blue-mid); }
+  select:disabled { opacity: .4; cursor: not-allowed; }
   .autocomplete-wrap { position: relative; }
   .autocomplete-list { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--white); border: 1.5px solid var(--gray-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 50; max-height: 220px; overflow-y: auto; display: none; }
   .autocomplete-list.open { display: block; }
@@ -603,17 +604,18 @@ function buscar(silencioso) {
     return;
   }
 
-  // Exige pelo menos 2 filtros preenchidos
+  // Exige pelo menos 2 filtros preenchidos, exceto para as verticals 'saúde' ou 'educação'
   var preenchidos = [vertical, portfolio, userNames.length ? '1' : ''].filter(Boolean).length;
-  if (preenchidos < 2) {
-    if (!silencioso) {
+  var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
+  if (preenchidos < 2 && !verticalPermiteSozinha) {
+   if (!silencioso) {
       document.getElementById('results').innerHTML =
         '<div class="state"><div class="state-icon">⚠️</div>' +
         'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
-        '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
-      document.getElementById('chips').style.display = 'none';
-    } else if (buscaAtiva) { agendarProximoRefresh(); }
-    return;
+       '<span style="font-size:12px;margin-top:6px;display:block">Portfólio, Vertical e/ou Responsável.</span></div>';
+     document.getElementById('chips').style.display = 'none';
+   } else if (buscaAtiva) { agendarProximoRefresh(); }
+  return;
   }
 
   var params = new URLSearchParams();
@@ -677,7 +679,19 @@ function buscar(silencioso) {
 }
 
 // Auto-search ao alterar qualquer filtro
-document.getElementById('sel-vertical').addEventListener('change', function() { buscar(); });
+document.getElementById('sel-vertical').addEventListener('change', function() {
+  var v = this.value.toLowerCase();
+  var selPortfolio = document.getElementById('sel-portfolio');
+  if (v === 'saúde' || v === 'educação') {
+    selPortfolio.value = '';
+    selPortfolio.disabled = true;
+    selPortfolio.title = 'Portfólio não aplicável para a vertical ' + this.value;
+  } else {
+    selPortfolio.disabled = false;
+    selPortfolio.title = '';
+  }
+  buscar();
+});
 document.getElementById('sel-portfolio').addEventListener('change', function() { buscar(); });
 document.getElementById('sel-days').addEventListener('change', function() { if (buscaAtiva) buscar(); });
 
@@ -980,19 +994,27 @@ function restaurarFiltros() {
     var saved = localStorage.getItem('filtros_v2');
     if (!saved) return;
     var f = JSON.parse(saved);
-    if (f.portfolio) document.getElementById('sel-portfolio').value = f.portfolio;
     if (f.vertical)  document.getElementById('sel-vertical').value  = f.vertical;
+    var v = (f.vertical || '').toLowerCase();
+    var selPortfolio = document.getElementById('sel-portfolio');
+    if (v === 'saúde' || v === 'educação') {
+      selPortfolio.value    = '';
+      selPortfolio.disabled = true;
+      selPortfolio.title    = 'Portfólio não aplicável para a vertical ' + f.vertical;
+    } else {
+      if (f.portfolio) selPortfolio.value = f.portfolio;
+    }
     if (f.days)      document.getElementById('sel-days').value      = f.days;
     if (f.users && f.users.length) {
       f.users.forEach(function(u) { adicionarUserTag(u); });
     }
     if (f.tipos && f.tipos.length) pendingTiposRestore = f.tipos;
 
-    // Agenda busca automática se há filtros suficientes — initTipos irá dispará-la
     var portfolio = document.getElementById('sel-portfolio').value;
     var vertical  = document.getElementById('sel-vertical').value;
+    var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
     var preenchidos = [portfolio, vertical, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
-    if (preenchidos >= 2) pendingAutoSearch = true;
+    if (preenchidos >= 2 || verticalPermiteSozinha) pendingAutoSearch = true;
   } catch(e) {}
 }
 restaurarFiltros();
