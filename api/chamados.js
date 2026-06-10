@@ -20,7 +20,7 @@ const FIELDS = [
   'updated',
   'customfield_32400', // Portfólio de Atendimento
   'customfield_10300', // Vertical
-  'customfield_21500', // Equipe Responsável (Ajuste o ID numérico conforme seu Jira)
+  'customfield_21500', // Equipe Responsável
 ];
 
 module.exports = async function handler(req, res) {
@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
   }
 
-  // 1. Valida e sanitiza parâmetros de entrada (req.query contém o parâmetro 'equipe')
+  // 1. Valida e sanitiza parâmetros de entrada
   let params;
   try {
     params = validateSearchParams(req.query);
@@ -40,15 +40,18 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Valida tipos, período e usuários
-  const selectedTypeIds = (req.query.typeIds || '')
+  // 2. CORREÇÃO: Divide de forma inteligente tipos numéricos (IDs) e alfanuméricos (Nomes/Strings como Melhoria)
+  const rawTypes = (req.query.typeIds || req.query.types || '')
     .split(',')
     .map(s => s.trim())
-    .filter(s => /^\d+$/.test(s))
+    .filter(Boolean)
     .slice(0, 50);
-  const selectedTypes = validateTypes(req.query.types);
-  const days          = validateDays(req.query.days);
-  const users         = validateUsers(req.query.users || req.query.user || '');
+
+  const selectedTypeIds = rawTypes.filter(s => /^\d+$/.test(s));
+  const selectedTypes   = rawTypes.filter(s => !/^\d+$/.test(s)).map(t => validateTypes(t)[0]).filter(Boolean);
+  
+  const days            = validateDays(req.query.days);
+  const users           = validateUsers(req.query.users || req.query.user || '');
 
   // 3. Constrói JQLs separados — um para sem responsável, outro para os usuários.
   const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
@@ -99,22 +102,28 @@ module.exports = async function handler(req, res) {
 
 /**
  * Constrói JQL para uma das duas queries independentes.
- * Prefere filtrar por ID numérico (typeIds) para cobrir tipos homônimos;
- * cai no filtro por nome (types) como fallback.
+ * Combina IDs numéricos e Nomes de tipos de chamados de forma segura na cláusula 'in'.
  * @param {'unassigned'|'assigned'} mode
  */
 function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
+  // CORREÇÃO: Unifica tipos numéricos (IDs) e strings (Nomes) num único array para JQL 'in'
+  const typeClauses = [];
   if (selectedTypeIds && selectedTypeIds.length > 0) {
-    clauses.push(`issuetype in (${selectedTypeIds.join(', ')})`);
-  } else if (selectedTypes && selectedTypes.length > 0) {
-    clauses.push(`issuetype in (${selectedTypes.map(t => `"${t}"`).join(', ')})`);
+    typeClauses.push(...selectedTypeIds);
+  }
+  if (selectedTypes && selectedTypes.length > 0) {
+    typeClauses.push(...selectedTypes.map(t => `"${t}"`));
+  }
+
+  if (typeClauses.length > 0) {
+    clauses.push(`issuetype in (${typeClauses.join(', ')})`);
   }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
   if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (equipe)      clauses.push(`cf[21500] = "${equipe}"`); // Equipe Responsável
+  if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); // Filtra por Equipe Responsável
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
@@ -149,7 +158,7 @@ function mapIssue(raw) {
     created:   f.created,
     vertical:  f.customfield_10300?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
-    equipe:      f.customfield_21500?.value ?? null, // Mapeia equipe para o DTO de saída
+    equipe:    f.customfield_21500?.value ?? null, // Mapeia equipe para o DTO de saída
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,
   };
 }
