@@ -825,17 +825,28 @@ function sortIssues(issues, col, dir) {
   });
 }
 
+/**
+ * Renderiza as tabelas de chamados.
+ * Ajustada para exibir a coluna "Equipe" na tabela de sem responsável.
+ *
+ * @param {any[]} issues - Lista de chamados
+ * @param {string} tableId - ID da tabela para controle de ordenação
+ * @param {boolean} showTempoFila - Se true, renderiza no formato da tabela "Sem Responsável"
+ */
 function renderTable(issues, tableId, showTempoFila) {
   if (!issues.length) return '<div class="state"><div class="state-icon">✅</div>Nenhum chamado no momento.</div>';
 
   var sorted = sortState.col ? sortIssues(issues, sortState.col, sortState.dir) : issues;
 
+  // 1. Injeta a coluna 'Equipe' na tabela "Sem responsável" (showTempoFila = true)
   var headers = showTempoFila
-    ? ['Chamado','Resumo','Portfólio','Vertical','Status','Prior.','Tipo','Na fila','Atualizado']
+    ? ['Chamado','Resumo','Portfólio','Vertical','Equipe','Status','Prior.','Tipo','Na fila','Atualizado']
     : ['Chamado','Resumo','Portfólio','Vertical','Responsável','Status','Prior.','Tipo','Atualizado'];
+    
   var sortKeysLocal = showTempoFila
-    ? ['key','summary','portfolio','vertical','status','priority','type','updated','updated']
+    ? ['key','summary','portfolio','vertical','equipe','status','priority','type','updated','updated']
     : ['key','summary','portfolio','vertical','assignee','status','priority','type','updated'];
+    
   var ths = headers.map(function(h, idx) {
     var col = sortKeysLocal[idx];
     var cls = 'sortable' + (sortState.col === col ? (' sort-' + sortState.dir) : '');
@@ -849,7 +860,12 @@ function renderTable(issues, tableId, showTempoFila) {
       '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
-      (!showTempoFila ? '<td style="font-size:12px;white-space:nowrap">' + escHtml(i.assignee || '—') + '</td>' : '') +
+      // 2. Condicional: exibe a Equipe Responsável na tabela sem responsável, 
+      // ou o Analista Responsável na tabela de chamados atribuídos
+      (showTempoFila 
+        ? '<td style="font-size:12px;white-space:nowrap">' + escHtml(i.equipe || '—') + '</td>' 
+        : '<td style="font-size:12px;white-space:nowrap">' + escHtml(i.assignee || '—') + '</td>'
+      ) +
       '<td>' + statusPill(i.status) + '</td>' +
       '<td>' + priBadge(i.priority) + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + escHtml(i.type) + '</td>' +
