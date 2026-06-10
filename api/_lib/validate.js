@@ -3,9 +3,6 @@
  *
  * Impede JQL Injection ao garantir que valores externos nunca sejam
  * interpolados diretamente na query sem escapamento.
- *
- * Referência de risco: um valor como `" OR issueKey > 0 OR "` injetado
- * num campo JQL poderia expor chamados de outros projetos.
  */
 
 /** Tipos de chamado — mantido para referência, mas não usado como lista fechada. */
@@ -25,12 +22,11 @@ const PORTFOLIOS_VALIDOS = new Set([
   'Portfólio SC/SP',
 ]);
 
-/** Equipes permitidas — valores confirmados no Jira. */
+/** Equipes permitidas — Sincronizadas exatamente com as <option> do frontend. */
 const EQUIPES_VALIDAS = new Set([
-  'Equipe Alfa',
-  'Equipe Beta',
-  'Equipe Gama',
-  'Equipe Delta',
+  'Suporte',
+  'Serviço',
+  'Produto',
 ]);
 
 /**
@@ -46,11 +42,6 @@ function escapeJqlValue(value) {
 
 /**
  * Sanitiza a lista de tipos recebida como string CSV.
- * Cada valor é escapado para uso seguro no JQL.
- * Limite de 50 tipos por requisição para evitar JQL excessivamente longo.
- *
- * @param {string|undefined} typesParam - CSV ex: "Incidente,Dúvida"
- * @returns {string[]} Lista de tipos sanitizados, ou array vazio (= sem filtro)
  */
 function validateTypes(typesParam) {
   if (!typesParam || !typesParam.trim()) return [];
@@ -61,13 +52,11 @@ function validateTypes(typesParam) {
     .map(t => escapeJqlValue(t));
 }
 
-/** Valores de período permitidos (em dias). 0 = sem limite. */
+/** Valores de período permitidos (em dias). */
 const DIAS_VALIDOS = new Set([0, 30, 60, 90]);
 
 /**
  * Valida o parâmetro de período em dias.
- * @param {string|undefined} daysParam
- * @returns {number} 0 = sem filtro de data
  */
 function validateDays(daysParam) {
   const n = parseInt(daysParam, 10);
@@ -77,12 +66,19 @@ function validateDays(daysParam) {
 
 /**
  * Valida e sanitiza os parâmetros de busca recebidos da query string.
- * Retorna os valores seguros ou lança ValidationError.
+ * Suporta o parâmetro 'cf[21500]' enviado diretamente do frontend.
  *
- * @param {{ vertical?: string, portfolio?: string, user?: string, equipe?: string }} params
+ * @param {object} queryParams - Objeto contendo os parâmetros da query string
  * @returns {{ vertical: string|null, portfolio: string|null, user: string|null, equipe: string|null }}
  */
-function validateSearchParams({ vertical, portfolio, user, equipe }) {
+function validateSearchParams(queryParams) {
+  const vertical = queryParams.vertical;
+  const portfolio = queryParams.portfolio;
+  const user = queryParams.user;
+  
+  // Aceita tanto o parâmetro legível 'equipe' como o parâmetro literal 'cf[21500]'
+  const equipe = queryParams.equipe || queryParams['cf[21500]'];
+
   // 1. Vertical: deve estar na lista fechada
   if (vertical !== undefined && vertical !== '') {
     if (!VERTICAIS_VALIDAS.has(vertical)) {
@@ -97,22 +93,19 @@ function validateSearchParams({ vertical, portfolio, user, equipe }) {
     }
   }
 
-  // 3. Equipe Responsável: deve estar na lista fechada
+  // 3. Equipa Responsável: deve estar na lista fechada
   if (equipe !== undefined && equipe !== '') {
     if (!EQUIPES_VALIDAS.has(equipe)) {
-      throw new ValidationError(`Equipe inválida: "${equipe}"`);
+      throw new ValidationError(`Equipa inválida: "${equipe}"`);
     }
   }
 
-  // ── CORREÇÃO DE SEGURANÇA NO BACK-END ──────────────────────────────────
-  // Replicando a regra do Front-end: Saúde e Educação NÃO possuem portfólio.
-  // Se tentarem injetar via API externa, nós limpamos/ignoramos o parâmetro.
+  // ── REGRA DE SEGURANÇA: Saúde e Educação NÃO possuem portfólio ─────────
   let safePortfolio = portfolio || null;
   const vLower = (vertical || '').toLowerCase();
   if (vLower === 'saúde' || vLower === 'educação') {
     safePortfolio = null; 
   }
-  // ───────────────────────────────────────────────────────────────────────
 
   // 4. Usuário: aceita qualquer string, mas escapa para uso no JQL
   let safeUser = null;
@@ -127,15 +120,12 @@ function validateSearchParams({ vertical, portfolio, user, equipe }) {
     vertical:  vertical || null,
     portfolio: safePortfolio,
     user:      safeUser,
-    equipe:      equipe || null,
+    equipe:    equipe || null,
   };
 }
 
 /**
  * Valida o parâmetro de busca de usuários.
- *
- * @param {string|undefined} q
- * @returns {string} query sanitizada
  */
 function validateUserQuery(q) {
   if (!q || q.trim().length < 2) {
@@ -148,9 +138,7 @@ function validateUserQuery(q) {
 }
 
 /**
- * Valida e sanitiza uma lista de usuários (suporte a múltiplos responsáveis).
- * @param {string|undefined} usersParam - CSV ex: "joao.silva,maria.costa"
- * @returns {string[]} Lista de usernames escapados, ou array vazio
+ * Valida e sanitiza uma lista de usuários.
  */
 function validateUsers(usersParam) {
   if (!usersParam || !usersParam.trim()) return [];
@@ -162,7 +150,6 @@ function validateUsers(usersParam) {
     .map(u => escapeJqlValue(u));
 }
 
-/** Erro de validação de parâmetros de entrada. */
 class ValidationError extends Error {
   constructor(message) {
     super(message);

@@ -675,7 +675,7 @@ function buscar(silencioso) {
   var params = new URLSearchParams();
   if (vertical)           params.set('vertical',  vertical);
   if (portfolio)          params.set('portfolio', portfolio);
-  if (equipe)               params.set('equipe',      equipe); // Novo filtro enviado
+  if (equipe)               params.set('cf[21500]',      equipe); // Novo filtro enviado
   if (userNames.length)   params.set('users',     userNames.join(','));
   
   var arrTypeKeys = [];
