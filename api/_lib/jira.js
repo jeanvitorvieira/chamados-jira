@@ -103,10 +103,20 @@ async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
  * @param {number} [maxResults=10]
  * @returns {Promise<any[]>}
  */
-async function searchUsers(query, maxResults = 10) {
-  const safeMax = Number.isFinite(maxResults) ? maxResults : 10;
-  const qs = new URLSearchParams({ username: query, maxResults: safeMax });
-  return request(`/rest/api/2/user/search?${qs}`);
+async function searchUsers(query, maxResults = 50) {
+  const safeMax = Number.isFinite(maxResults) ? maxResults : 50;
+  // Busca em paralelo por username e por displayName (query)
+  const [byUsername, byQuery] = await Promise.all([
+    request(`/rest/api/2/user/search?${new URLSearchParams({ username: query, maxResults: safeMax })}`).catch(() => []),
+    request(`/rest/api/2/user/search?${new URLSearchParams({ query: query, maxResults: safeMax })}`).catch(() => []),
+  ]);
+  // Deduplica pelo name
+  const seen = new Set();
+  return [...byUsername, ...byQuery].filter(u => {
+    if (seen.has(u.name)) return false;
+    seen.add(u.name);
+    return true;
+  });
 }
 
 /**
