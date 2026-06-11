@@ -1046,8 +1046,20 @@ function renderUserTags() {
   selectedUsers.forEach(function(u) {
     var tag = document.createElement('span');
     tag.className = 'user-tag';
-    tag.innerHTML = escHtml(u.displayName) +
-      '<span class="tag-x" onclick="removerUserTag(\'' + escHtml(u.name) + '\')" title="Remover">×</span>';
+
+    var nameSpan = document.createElement('span');
+    nameSpan.textContent = u.displayName;
+
+    var x = document.createElement('span');
+    x.className = 'tag-x';
+    x.title = 'Remover';
+    x.textContent = '×';
+    x.addEventListener('click', (function(userName) {
+      return function() { removerUserTag(userName); };
+    })(u.name));
+
+    tag.appendChild(nameSpan);
+    tag.appendChild(x);
     container.appendChild(tag);
   });
   document.getElementById('inp-user').placeholder = selectedUsers.length ? 'Adicionar...' : 'Adicionar responsável...';
