@@ -59,6 +59,7 @@ module.exports = async function handler(req, res) {
     ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
     : null;
 
+  console.log('[DEBUG] jqlAssigned:', jqlAssigned);
   // 4. Executa as queries em paralelo
   try {
     const [dataUnassigned, dataAssigned] = await Promise.all([
