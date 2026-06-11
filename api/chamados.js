@@ -24,6 +24,9 @@ const FIELDS = [
   'customfield_21500', // Equipe Responsável
 ];
 
+/** * Lista de tipos obsoletos ou de sistema que serão filtrados em memória
+ * para evitar erros de validação JQL (HTTP 400) caso não existam no Jira.
+ */
 const NOMES_TIPOS_EXCLUIDOS = [
   'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
   'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
@@ -52,7 +55,7 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. CORREÇÃO: Divide de forma inteligente tipos numéricos (IDs) e alfanuméricos (Nomes/Strings como Melhoria)
+  // 2. Divide de forma inteligente tipos numéricos (IDs) e alfanuméricos (Nomes)
   const rawTypes = (req.query.typeIds || req.query.types || '')
     .split(',')
     .map(s => s.trim())
@@ -78,14 +81,20 @@ module.exports = async function handler(req, res) {
       jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
     ]);
 
-    const unassigned = (dataUnassigned.issues ?? []).map(mapIssue);
-    const assigned   = (dataAssigned.issues   ?? []).map(mapIssue);
+    // SOLUÇÃO: Filtramos os tipos indesejados aqui, em memória (JavaScript), sem risco de quebrar o Jira!
+    const unassigned = (dataUnassigned.issues ?? [])
+      .map(mapIssue)
+      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
+
+    const assigned = (dataAssigned.issues ?? [])
+      .map(mapIssue)
+      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
 
     return res.status(200).json({
       ok:              true,
-      totalUnassigned: dataUnassigned.total,
-      totalAssigned:   dataAssigned.total,
-      total:           dataUnassigned.total + dataAssigned.total,
+      totalUnassigned: unassigned.length,
+      totalAssigned:   assigned.length,
+      total:           unassigned.length + assigned.length,
       unassigned,
       assigned,
     });
@@ -115,7 +124,6 @@ module.exports = async function handler(req, res) {
 /**
  * Constrói JQL para uma das duas queries independentes.
  * Combina IDs numéricos e Nomes de tipos de chamados de forma segura na cláusula 'in'.
- * @param {'unassigned'|'assigned'} mode
  */
 function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
@@ -131,13 +139,9 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
   if (typeClauses.length > 0) {
     clauses.push(`issuetype in (${typeClauses.join(', ')})`);
   } else {
-    // PROTEÇÃO ATIVA: Se for buscar "Todos os tipos" (parâmetro omitido para evitar URL grande),
-    // exclui sub-tarefas e os tipos obsoletos da lista para não poluir o painel.
+    // PROTEÇÃO ATIVA: Remove sub-tarefas usando a função nativa do Jira (sempre válida).
+    // As exclusões específicas por nome são tratadas no Javascript para evitar erros 400.
     clauses.push('issuetype not in subTaskIssueTypes()');
-    if (NOMES_TIPOS_EXCLUIDOS.length > 0) {
-      const nomesSanitizados = NOMES_TIPOS_EXCLUIDOS.map(t => `"${t.replace(/"/g, '\\"')}"`).join(', ');
-      clauses.push(`issuetype not in (${nomesSanitizados})`);
-    }
   }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
@@ -158,9 +162,6 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
 
 /**
  * Transforma um objeto issue cru da API Jira em um DTO limpo.
- *
- * @param {object} raw - Issue no formato da API REST do Jira
- * @returns {object} Issue normalizada
  */
 function mapIssue(raw) {
   const f = raw.fields;
