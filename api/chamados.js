@@ -19,7 +19,7 @@ const FIELDS = [
   'created',
   'updated',
   'customfield_32400', // Portfólio de Atendimento
-  'customfield_10300', // Vertical
+  'customfield_10132', // Sistema
   'customfield_21500', // Equipe Responsável
 ];
 
@@ -122,7 +122,7 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
   }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
-  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
+  if (vertical)  clauses.push(`cf[10132] = "${vertical}"`);
   if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); // Filtra por Equipe Responsável
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
@@ -156,7 +156,7 @@ function mapIssue(raw) {
     assignee:  f.assignee?.displayName ?? null,
     updated:   f.updated,
     created:   f.created,
-    vertical:  f.customfield_10300?.value ?? null,
+    sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
     equipe:    f.customfield_21500?.value ?? null, // Mapeia equipe para o DTO de saída
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,

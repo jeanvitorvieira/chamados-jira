@@ -96,7 +96,7 @@ function validateSearchParams(queryParams) {
   // 3. Equipa Responsável: deve estar na lista fechada
   if (equipe !== undefined && equipe !== '') {
     if (!EQUIPES_VALIDAS.has(equipe)) {
-      throw new ValidationError(`Equipa inválida: "${equipe}"`);
+      throw new ValidationError(`Equipe inválida: "${equipe}"`);
     }
   }
 

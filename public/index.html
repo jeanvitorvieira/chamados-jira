@@ -819,7 +819,7 @@ function fmtDate(iso) {
 }
 
 var sortState = { col: null, dir: 'asc' };
-var SORT_KEYS = ['key', 'summary', 'portfolio', 'vertical', 'assignee', 'status', 'priority', 'type', 'updated'];
+var SORT_KEYS = ['key', 'summary', 'portfolio', 'sistema', 'assignee', 'status', 'priority', 'type', 'updated'];
 var PRIORITY_ORDER = { 'Highest': 1, 'High': 2, 'Medium': 3, 'Low': 4, 'Lowest': 5 };
 
 function sortIssues(issues, col, dir) {
@@ -850,12 +850,12 @@ function renderTable(issues, tableId, showTempoFila) {
 
   // 1. Injeta a coluna 'Equipe' na tabela "Sem responsável" (showTempoFila = true)
   var headers = showTempoFila
-    ? ['Chamado','Resumo','Portfólio','Vertical','Equipe','Status','Prior.','Tipo','Na fila','Atualizado']
-    : ['Chamado','Resumo','Portfólio','Vertical','Responsável','Status','Prior.','Tipo','Atualizado'];
-    
+    ? ['Chamado','Resumo','Portfólio','Sistema','Equipe','Status','Prior.','Tipo','Na fila','Atualizado']
+    : ['Chamado','Resumo','Portfólio','Sistema','Responsável','Status','Prior.','Tipo','Atualizado'];
+
   var sortKeysLocal = showTempoFila
-    ? ['key','summary','portfolio','vertical','equipe','status','priority','type','updated','updated']
-    : ['key','summary','portfolio','vertical','assignee','status','priority','type','updated'];
+    ? ['key','summary','portfolio','sistema','equipe','status','priority','type','updated','updated']
+    : ['key','summary','portfolio','sistema','assignee','status','priority','type','updated'];
     
   var ths = headers.map(function(h, idx) {
     var col = sortKeysLocal[idx];
@@ -869,7 +869,7 @@ function renderTable(issues, tableId, showTempoFila) {
       '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
       '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
       '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
-      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.vertical || '—') + '</td>' +
+      '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.sistema || '—') + '</td>' +
       // 2. Condicional: exibe a Equipe Responsável na tabela sem responsável, 
       // ou o Analista Responsável na tabela de chamados atribuídos
       (showTempoFila 
