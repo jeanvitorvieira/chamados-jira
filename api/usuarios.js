@@ -48,7 +48,7 @@ module.exports = async function handler(req, res) {
   }
 
   const users = rawUsers.map(u => ({
-    name:        u.name,
+    name:        u.emailAddress || u.name, // usa email como identificador para o JQL
     displayName: u.displayName,
     email:       u.emailAddress,
   }));
