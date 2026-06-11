@@ -1,19 +1,3 @@
-/**
- * GET /api/usuarios
- *
- * Busca usuários no Jira por nome ou e-mail.
- * Usado pelo autocomplete de responsável no frontend.
- *
- * Query params:
- *   q {string} — texto de busca (mín. 2 caracteres)
- *
- * Resposta 200:
- *   { ok: true, users: User[] }
- *
- * Resposta de erro:
- *   { ok: false, error: string, code: string }
- */
-
 const { searchUsers, JiraError, ConfigError } = require('./_lib/jira');
 const { validateUserQuery, ValidationError } = require('./_lib/validate');
 
@@ -22,7 +6,6 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
   }
 
-  // 1. Valida query
   let query;
   try {
     query = validateUserQuery(req.query.q);
@@ -33,7 +16,6 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Busca no Jira
   let rawUsers;
   try {
     rawUsers = await searchUsers(query);
@@ -48,7 +30,7 @@ module.exports = async function handler(req, res) {
   }
 
   const users = rawUsers.map(u => ({
-    name:        u.emailAddress || u.name, // usa email como identificador para o JQL
+    name:        u.emailAddress || u.name,
     displayName: u.displayName,
     email:       u.emailAddress,
   }));

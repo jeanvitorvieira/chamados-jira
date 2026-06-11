@@ -1,15 +1,6 @@
-/**
- * GET /api/chamados
- *
- * Busca issues abertas no Jira com filtros opcionais de portfólio,
- * vertical, equipe responsável e responsável. Retorna chamados sem responsável 
- * e atribuídos aos usuários informados, separados por categoria.
- */
-
 const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
 const { validateSearchParams, validateTypes, validateDays, validateUsers, ValidationError } = require('./_lib/validate');
 
-/** Campos retornados para cada issue. */
 const FIELDS = [
   'summary',
   'status',
@@ -18,15 +9,12 @@ const FIELDS = [
   'issuetype',
   'created',
   'updated',
-  'customfield_32400', // Portfólio de Atendimento
-  'customfield_10300', // Vertical (necessário para manter o filtro)
-  'customfield_10132', // Sistema (campo que será exibido na coluna)
-  'customfield_21500', // Equipe Responsável
+  'customfield_32400',
+  'customfield_10300',
+  'customfield_10132',
+  'customfield_21500',
 ];
 
-/** * Lista de tipos obsoletos ou de sistema que serão filtrados em memória
- * para evitar erros de validação JQL (HTTP 400) caso não existam no Jira.
- */
 const NOMES_TIPOS_EXCLUIDOS = [
   'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
   'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
@@ -39,12 +27,10 @@ const NOMES_TIPOS_EXCLUIDOS = [
 ];
 
 module.exports = async function handler(req, res) {
-  // Só aceita GET
   if (req.method !== 'GET') {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
   }
 
-  // 1. Valida e sanitiza parâmetros de entrada
   let params;
   try {
     params = validateSearchParams(req.query);
@@ -55,7 +41,6 @@ module.exports = async function handler(req, res) {
     throw err;
   }
 
-  // 2. Divide de forma inteligente tipos numéricos (IDs) e alfanuméricos (Nomes)
   const rawTypes = (req.query.typeIds || req.query.types || '')
     .split(',')
     .map(s => s.trim())
@@ -68,20 +53,17 @@ module.exports = async function handler(req, res) {
   const days            = validateDays(req.query.days);
   const users           = validateUsers(req.query.users || req.query.user || '');
 
-  // 3. Constrói JQLs separados — um para sem responsável, outro para os usuários.
   const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
   const jqlAssigned   = users.length > 0
     ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
     : null;
 
-  // 4. Executa as queries em paralelo
   try {
     const [dataUnassigned, dataAssigned] = await Promise.all([
       searchIssues(jqlUnassigned, FIELDS),
       jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
     ]);
 
-    // SOLUÇÃO: Filtramos os tipos indesejados aqui, em memória (JavaScript), sem risco de quebrar o Jira!
     const unassigned = (dataUnassigned.issues ?? [])
       .map(mapIssue)
       .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
@@ -119,12 +101,6 @@ module.exports = async function handler(req, res) {
   }
 };
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-
-/**
- * Constrói JQL para uma das duas queries independentes.
- * Combina IDs numéricos e Nomes de tipos de chamados de forma segura na cláusula 'in'.
- */
 function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
@@ -139,13 +115,11 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
   if (typeClauses.length > 0) {
     clauses.push(`issuetype in (${typeClauses.join(', ')})`);
   } else {
-    // PROTEÇÃO ATIVA: Remove sub-tarefas usando a função nativa do Jira (sempre válida).
-    // As exclusões específicas por nome são tratadas no Javascript para evitar erros 400.
     clauses.push('issuetype not in subTaskIssueTypes()');
   }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
-  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`); // Filtra pela vertical cf[10300] no Jira
+  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
   if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); 
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
@@ -160,9 +134,6 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
   return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC';
 }
 
-/**
- * Transforma um objeto issue cru da API Jira em um DTO limpo.
- */
 function mapIssue(raw) {
   const f = raw.fields;
   return {
@@ -175,7 +146,7 @@ function mapIssue(raw) {
     assignee:  f.assignee?.displayName ?? null,
     updated:   f.updated,
     created:   f.created,
-    sistema:   f.customfield_10132?.value ?? null, // Captura o valor do Sistema para as colunas do painel
+    sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
     equipe:    f.customfield_21500?.value ?? null, 
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,
