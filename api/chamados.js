@@ -59,7 +59,6 @@ module.exports = async function handler(req, res) {
     ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
     : null;
 
-  console.log('[DEBUG] jqlAssigned:', jqlAssigned);
   // 4. Executa as queries em paralelo
   try {
     const [dataUnassigned, dataAssigned] = await Promise.all([
@@ -151,7 +150,7 @@ function mapIssue(raw) {
     key:       raw.key,
     summary:   f.summary,
     status:    f.status?.name ?? '—',
-    statusCat: f.status?.statusCategory?.name ?? '',
+    statusCat: f.status?.statusCategory?.key ?? '',
     priority:  f.priority?.name ?? '—',
     type:      f.issuetype?.name ?? '—',
     assignee:  f.assignee?.displayName ?? null,
