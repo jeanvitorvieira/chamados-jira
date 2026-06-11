@@ -678,16 +678,15 @@ function buscar(silencioso) {
   var params = new URLSearchParams();
   if (vertical)           params.set('vertical',  vertical);
   if (portfolio)          params.set('portfolio', portfolio);
-  if (equipe)               params.set('cf[21500]',      equipe); // Novo filtro enviado
+  if (equipe)             params.set('cf[21500]', equipe); 
   if (userNames.length)   params.set('users',     userNames.join(','));
   
-  // DEPOIS:
+  // EVITA URL GIGANTE: Omitimos typeIds se todos os checkboxes estiverem marcados!
   var arrTypeKeys = [];
   tiposSelected.forEach(function(k) { arrTypeKeys.push(k); });
-  // Só filtra se houver seleção parcial — se todos estão selecionados,
-  // omitir é equivalente e evita excluir tipos não listados no frontend.
   var totalTiposDisponiveis = document.querySelectorAll('#tipo-items input[type=checkbox]').length;
   var todosSelecionados = arrTypeKeys.length >= totalTiposDisponiveis && totalTiposDisponiveis > 0;
+  
   if (arrTypeKeys.length > 0 && !todosSelecionados) {
     params.set('typeIds', arrTypeKeys.join(','));
   }

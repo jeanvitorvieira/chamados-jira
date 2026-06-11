@@ -24,6 +24,17 @@ const FIELDS = [
   'customfield_21500', // Equipe Responsável
 ];
 
+const NOMES_TIPOS_EXCLUIDOS = [
+  'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
+  'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
+  'Suporte (NÃO USAR - Use Dúvida)',
+  'Análise de dados (NÃO USAR - Use Tratamento de Dados)',
+  'Alteração de dados (NÃO USAR - Use Tratamento de Dados)',
+  'Migração de Dados (NÃO USAR - Use Tratamento de Dados)',
+  'Fora de escopo (NÃO USAR - Use Dúvida)',
+  'Treinamento de Implantação old',
+];
+
 module.exports = async function handler(req, res) {
   // Só aceita GET
   if (req.method !== 'GET') {
@@ -109,7 +120,6 @@ module.exports = async function handler(req, res) {
 function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
   const clauses = ['statusCategory != Done'];
 
-  // CORREÇÃO: Unifica tipos numéricos (IDs) e strings (Nomes) num único array para JQL 'in'
   const typeClauses = [];
   if (selectedTypeIds && selectedTypeIds.length > 0) {
     typeClauses.push(...selectedTypeIds);
@@ -120,15 +130,22 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
 
   if (typeClauses.length > 0) {
     clauses.push(`issuetype in (${typeClauses.join(', ')})`);
+  } else {
+    // PROTEÇÃO ATIVA: Se for buscar "Todos os tipos" (parâmetro omitido para evitar URL grande),
+    // exclui sub-tarefas e os tipos obsoletos da lista para não poluir o painel.
+    clauses.push('issuetype not in subTaskIssueTypes()');
+    if (NOMES_TIPOS_EXCLUIDOS.length > 0) {
+      const nomesSanitizados = NOMES_TIPOS_EXCLUIDOS.map(t => `"${t.replace(/"/g, '\\"')}"`).join(', ');
+      clauses.push(`issuetype not in (${nomesSanitizados})`);
+    }
   }
 
   if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
-  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); // Filtra por Equipe Responsável
+  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`); // Filtra pela vertical cf[10300] no Jira
+  if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); 
   if (days > 0)  clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
-    // Suporta múltiplos responsáveis
     clauses.push(users.length === 1
       ? `assignee = "${users[0]}"`
       : `assignee in (${users.map(u => `"${u}"`).join(', ')})`);
