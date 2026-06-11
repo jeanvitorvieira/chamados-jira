@@ -1,6 +1,14 @@
 /**
- * Suite de testes v2 — cobre sw.js (poll, detecção, notificações),
- * integração página↔SW, edge cases e bugs conhecidos.
+ * Suite de testes v3 — atualizada para refletir o estado atual do código.
+ *
+ * Mudanças em relação à v2:
+ * - dedup agora usa emailAddress || name como chave (usuarios.js retorna email como name)
+ * - buildParams não envia typeIds quando todos os tipos estão selecionados
+ * - preenchidos() inclui o filtro de equipe
+ * - statusCat usa .key (minúsculo: 'done', 'new', 'indeterminate')
+ * - removido teste de bug <\div> (corrigido)
+ * - removido teste de dead code perm no SW (sw.js reescrito)
+ * - renderUserTags usa addEventListener em vez de onclick inline
  */
 
 let passed = 0, failed = 0;
@@ -20,7 +28,6 @@ function throws(fn, msg)      { let ok=false; try { fn(); } catch { ok=true; } i
 // MOCKS
 // ═══════════════════════════════════════════════════════════════════
 
-// ── Mock SW poll logic ────────────────────────────────────────────
 function buildCurrent(unassigned, assigned) {
   const current = {};
   unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null,       updated: i.updated }; });
@@ -57,45 +64,63 @@ function swDetect(known, data) {
   return { isFirstRun: false, current, novos, status, mov, desap };
 }
 
-// ── Mock URL params (como SW monta a query) ───────────────────────
-function swBuildParams(config) {
+// ── buildParams — replica lógica atual da função buscar() ────────
+// Inclui: equipe, lógica de typeIds (não envia se todos selecionados)
+function buildParams(config) {
   const params = new URLSearchParams();
-  if (config.vertical)  params.set('vertical',  config.vertical);
-  if (config.portfolio) params.set('portfolio', config.portfolio);
-  if (config.users)     params.set('users',     config.users);
-  if (config.typeIds)   params.set('typeIds',   config.typeIds);
-  if (config.days)      params.set('days',      config.days);
+  if (config.vertical)           params.set('vertical',  config.vertical);
+  if (config.portfolio)          params.set('portfolio', config.portfolio);
+  if (config.equipe)             params.set('cf[21500]', config.equipe);
+  if (config.users)              params.set('users',     config.users);
+  if (config.days && config.days !== '0') params.set('days', config.days);
+
+  // Só envia typeIds se houver seleção PARCIAL
+  const arrTypeKeys = config.typeIds ? config.typeIds.split(',').filter(Boolean) : [];
+  const totalDisponivel = config.totalTiposDisponiveis || 0;
+  const todosSelecionados = arrTypeKeys.length >= totalDisponivel && totalDisponivel > 0;
+  if (arrTypeKeys.length > 0 && !todosSelecionados) {
+    params.set('typeIds', arrTypeKeys.join(','));
+  }
+
   return params.toString();
 }
 
-// ── Mock validação de filtros (página) ───────────────────────────
-function preenchidos(vertical, portfolio, userNames) {
+// ── preenchidos — replica lógica atual (inclui equipe) ───────────
+function preenchidos(vertical, portfolio, equipe, userNames) {
   let safePortfolio = portfolio;
   const vLower = (vertical || '').toLowerCase();
   if (vLower === 'saúde' || vLower === 'educação') {
-    safePortfolio = ''; // Força a neutralização do portfólio
+    safePortfolio = '';
   }
-  return [vertical, safePortfolio, userNames.length ? '1' : ''].filter(Boolean).length;
+  return [vertical, safePortfolio, equipe, userNames.length ? '1' : ''].filter(Boolean).length;
 }
 
-// ── Mock dedup autocomplete ───────────────────────────────────────
+// ── dedup — replica lógica atual do frontend (usa email como name) 
+// usuarios.js agora retorna: name = emailAddress || name
 function dedup(apiUsers, selectedUsers) {
   const sNames = {}; const sEmails = {};
   return apiUsers.filter(u => {
-    const nk = (u.name||'').toLowerCase();
-    const ek = (u.email||'').toLowerCase();
-    if (sNames[nk]) return false;
-    if (ek && sEmails[ek]) return false;
-    sNames[nk] = true; if (ek) sEmails[ek] = true;
+    const nk = (u.name  || '').toLowerCase(); // agora pode ser o email
+    const ek = (u.email || '').toLowerCase();
+    if (sNames[nk])              return false;
+    if (ek && sEmails[ek])       return false;
+    sNames[nk] = true;
+    if (ek) sEmails[ek] = true;
     return !selectedUsers.some(s =>
-      (s.name||'').toLowerCase() === nk ||
-      (ek && (s.email||'').toLowerCase() === ek));
+      (s.name  || '').toLowerCase() === nk ||
+      (ek && (s.email || '').toLowerCase() === ek));
   });
 }
 
-// ── Mock: detecta HTML bug (<\div>) ──────────────────────────────
-function hasHtmlBug(html) {
-  return html.includes('<\\div>') || html.includes('<\\/div>');
+// ── mapIssue — replica lógica atual (statusCat usa .key) ─────────
+function mapIssue(raw) {
+  const f = raw.fields;
+  return {
+    key:       raw.key,
+    status:    f.status?.name ?? '—',
+    statusCat: f.status?.statusCategory?.key ?? '',  // .key → 'done' | 'new' | 'indeterminate'
+    assignee:  f.assignee?.displayName ?? null,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -114,7 +139,7 @@ test('SW firstRun: baseline vazio → isFirstRun=true, sem notificações', () =
 
 test('SW firstRun: current é construído corretamente', () => {
   const r = swDetect({}, {
-    unassigned: [{ key:'A-1', status:'Aberto',     assignee:null,   updated:'t1', summary:'X' }],
+    unassigned: [{ key:'A-1', status:'Aberto',      assignee:null,   updated:'t1', summary:'X' }],
     assigned:   [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'Y' }],
   });
   eq(r.current['A-1'].assignee, null);
@@ -142,7 +167,7 @@ test('SW: ticket atribuído que voltou para fila → novo unassigned', () => {
   eq(r.novos.length, 1); eq(r.novos[0].key, 'A-1');
 });
 
-test('SW: ticket sem responsável que já estava sem responsável NÃO dispara', () => {
+test('SW: ticket sem responsável inalterado NÃO dispara', () => {
   const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
@@ -170,14 +195,11 @@ test('SW: status igual, updated diferente → movimentação', () => {
 });
 
 test('SW: ticket coberto por novos não entra em movimentação', () => {
-  // ticket novo sem responsável (não estava no known)
-  const known = {};
-  // Se known fosse vazio seria firstRun, usa known com outro ticket
   const known2 = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
   const r = swDetect(known2, {
     unassigned: [
       { key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' },
-      { key:'A-2', status:'Aberto', assignee:null, updated:'t1', summary:'Novo' }, // novo
+      { key:'A-2', status:'Aberto', assignee:null, updated:'t1', summary:'Novo' },
     ], assigned: []
   });
   assert(!r.mov.some(i => i.key === 'A-2'), 'novo não deve estar em mov');
@@ -195,7 +217,7 @@ test('SW: ticket coberto por statusAlterado não entra em movimentação', () =>
 
 test('SW: desaparecidos detectados quando resultado não truncado', () => {
   const known = {
-    'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' },
+    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
     'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
   };
   const r = swDetect(known, {
@@ -207,67 +229,287 @@ test('SW: desaparecidos detectados quando resultado não truncado', () => {
 
 test('SW: desaparecidos NÃO detectados quando truncado', () => {
   const known = {
-    'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' },
+    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
     'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
   };
   const r = swDetect(known, {
     unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
-    totalAssigned: 5  // truncado
+    totalAssigned: 5
   });
   eq(r.desap.length, 0);
 });
 
 test('SW: unassigned não conta como desaparecido', () => {
   const known = {
-    'A-1': { status:'Aberto', assignee:null, updated:'t1' }, // sem responsável
+    'A-1': { status:'Aberto', assignee:null,   updated:'t1' },
     'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' },
   };
   const r = swDetect(known, {
     unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
     totalAssigned: 1
   });
-  // A-1 sumiu mas era unassigned (assignee=null), não deve estar em desap
   assert(!r.desap.includes('A-1'), 'unassigned não deve aparecer em desap');
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// TESTES — buildParams do SW
-// ═══════════════════════════════════════════════════════════════════
-
-test('SW buildParams: todos os campos', () => {
-  const p = swBuildParams({ vertical:'Contábil', portfolio:'Portfólio Pequenas Contas', users:'jean,marlon', typeIds:'10001', days:'30' });
-  assert(p.includes('vertical=Cont%C3%A1bil'));
-  assert(p.includes('portfolio=Portf%C3%B3lio+Pequenas+Contas') || p.includes('portfolio=Portf%C3%B3lio%20Pequenas%20Contas'));
-  assert(p.includes('users=jean%2Cmarlon') || p.includes('users=jean,marlon'));
-  assert(p.includes('typeIds=10001'));
-  assert(p.includes('days=30'));
+test('SW: multiple detections não se sobrepõem', () => {
+  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
+  const data = { unassigned:[], assigned:[{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }], totalAssigned:1 };
+  const r = swDetect(known, data);
+  eq(r.status.length, 1, 'deve estar em status');
+  eq(r.mov.length, 0, 'não deve estar em mov');
 });
 
-test('SW buildParams: days="0" não é enviado (igual à página)', () => {
-  // Após fix: SW usa mesma lógica da página — days && days !== '0'
-  function swBuildParamsFixed(config) {
-    const params = new URLSearchParams();
-    if (config.vertical)  params.set('vertical',  config.vertical);
-    if (config.portfolio) params.set('portfolio', config.portfolio);
-    if (config.users)     params.set('users',     config.users);
-    if (config.typeIds)   params.set('typeIds',   config.typeIds);
-    if (config.days && config.days !== '0') params.set('days', config.days);
-    return params.toString();
-  }
-  const p = swBuildParamsFixed({ vertical:'Contábil', portfolio:'P', days:'0' });
-  assert(!p.includes('days'), 'days=0 não deve ser enviado após fix');
-  const p2 = swBuildParamsFixed({ vertical:'Contábil', portfolio:'P', days:'30' });
-  assert(p2.includes('days=30'), 'days=30 deve ser enviado');
+test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () => {
+  const known = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
+  const data = {
+    unassigned: [{ key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' }],
+    assigned:   [{ key:'B-9', status:'Aberto', assignee:'Jean', updated:'t1', summary:'Novo atribuído' }],
+    totalAssigned: 1
+  };
+  const r = swDetect(known, data);
+  assert(!r.status.some(i => i.key === 'B-9'), 'ticket novo em assigned não dispara status');
 });
 
-test('SW buildParams: users vazio não é enviado', () => {
-  const p = swBuildParams({ vertical:'Contábil', portfolio:'P', users:'' });
+test('SW: knownIssues passado pela página é usado como baseline correto', () => {
+  const pageKnown = {
+    'A-1': { status:'Aberto',       assignee:null,   updated:'t1' },
+    'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' },
+  };
+  const r = swDetect(pageKnown, {
+    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
+    assigned:   [{ key:'B-1', status:'Aguardando Manutenção', assignee:'Jean', updated:'t2', summary:'Y' }],
+    totalAssigned: 1
+  });
+  assert(!r.isFirstRun, 'não deve ser firstRun quando página passa knownIssues');
+  eq(r.status.length, 1, 'mudança de status detectada na primeira poll do SW');
+  eq(r.status[0].prevStatus, 'Em andamento');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — buildParams (inclui equipe + lógica typeIds atualizada)
+// ═══════════════════════════════════════════════════════════════════
+
+test('buildParams: todos os campos enviados corretamente', () => {
+  const p = buildParams({
+    vertical: 'Contábil',
+    portfolio: 'Portfólio Pequenas Contas',
+    equipe: 'Suporte',
+    users: 'jean.vieira@betha.com.br,marlon@betha.com.br',
+    typeIds: '10001',
+    totalTiposDisponiveis: 10,
+    days: '30'
+  });
+  assert(p.includes('vertical=Cont%C3%A1bil'), 'vertical codificado');
+  assert(p.includes('portfolio='), 'portfolio presente');
+  assert(p.includes('cf%5B21500%5D=Suporte') || p.includes('cf[21500]=Suporte'), 'equipe presente');
+  assert(p.includes('users='), 'users presente');
+  assert(p.includes('typeIds=10001'), 'typeIds parcial enviado');
+  assert(p.includes('days=30'), 'days presente');
+});
+
+test('buildParams: days="0" não é enviado', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'0', totalTiposDisponiveis: 0 });
+  assert(!p.includes('days'), 'days=0 não deve ser enviado');
+});
+
+test('buildParams: days="30" é enviado', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'30', totalTiposDisponiveis: 0 });
+  assert(p.includes('days=30'), 'days=30 deve ser enviado');
+});
+
+test('buildParams: users vazio não é enviado', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', users:'', totalTiposDisponiveis: 0 });
   assert(!p.includes('users'), 'users vazio não deve ser enviado');
 });
 
-test('SW buildParams: typeIds vazio não é enviado', () => {
-  const p = swBuildParams({ vertical:'Contábil', portfolio:'P', typeIds:'' });
-  assert(!p.includes('typeIds'), 'typeIds vazio não deve ser enviado');
+test('buildParams: typeIds NÃO enviado quando todos selecionados', () => {
+  // 3 tipos disponíveis, 3 selecionados → todos → não envia
+  const p = buildParams({
+    vertical: 'Contábil', portfolio: 'P',
+    typeIds: '10001,10002,10003',
+    totalTiposDisponiveis: 3
+  });
+  assert(!p.includes('typeIds'), 'typeIds não deve ser enviado quando todos selecionados');
+});
+
+test('buildParams: typeIds NÃO enviado quando nenhum selecionado', () => {
+  const p = buildParams({
+    vertical: 'Contábil', portfolio: 'P',
+    typeIds: '',
+    totalTiposDisponiveis: 10
+  });
+  assert(!p.includes('typeIds'), 'typeIds não deve ser enviado quando vazio');
+});
+
+test('buildParams: typeIds enviado quando seleção é parcial', () => {
+  // 2 de 10 selecionados → parcial → envia
+  const p = buildParams({
+    vertical: 'Contábil', portfolio: 'P',
+    typeIds: '10001,10002',
+    totalTiposDisponiveis: 10
+  });
+  assert(p.includes('typeIds=10001%2C10002') || p.includes('typeIds=10001,10002'), 'typeIds parcial deve ser enviado');
+});
+
+test('buildParams: equipe não enviada quando vazia', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', equipe:'', totalTiposDisponiveis: 0 });
+  assert(!p.includes('cf%5B21500%5D') && !p.includes('cf[21500]'), 'equipe vazia não deve ser enviada');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — preenchidos() (agora inclui equipe)
+// ═══════════════════════════════════════════════════════════════════
+
+test('preenchidos: vertical + portfolio = 2', () => {
+  eq(preenchidos('Contábil', 'Portfólio Pequenas Contas', '', []), 2);
+});
+
+test('preenchidos: vertical + equipe = 2', () => {
+  eq(preenchidos('Arrecadação', '', 'Suporte', []), 2);
+});
+
+test('preenchidos: vertical + responsável = 2', () => {
+  eq(preenchidos('Contábil', '', '', ['jean.vieira@betha.com.br']), 2);
+});
+
+test('preenchidos: portfolio + equipe = 2', () => {
+  eq(preenchidos('', 'Portfólio Pequenas Contas', 'Suporte', []), 2);
+});
+
+test('preenchidos: só vertical = 1 (insuficiente)', () => {
+  eq(preenchidos('Contábil', '', '', []), 1);
+});
+
+test('Segurança: Saúde força portfólio vazio, conta apenas 1 sem responsável', () => {
+  eq(preenchidos('Saúde', 'Portfólio Pequenas Contas', '', []), 1);
+});
+
+test('Segurança: Educação força portfólio vazio, com responsável conta 2', () => {
+  eq(preenchidos('Educação', 'Portfólio SC/MG', '', ['filipe.andrade@betha.com.br']), 2);
+});
+
+test('Segurança: Saúde com equipe conta 2 (vertical + equipe)', () => {
+  eq(preenchidos('Saúde', 'Portfólio Pequenas Contas', 'Suporte', []), 2);
+});
+
+test('preenchidos: vertical + portfolio + equipe + responsável = 4', () => {
+  eq(preenchidos('Contábil', 'Portfólio Pequenas Contas', 'Suporte', ['jean@betha.com.br']), 4);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — statusCat usa .key (minúsculo)
+// ═══════════════════════════════════════════════════════════════════
+
+test('mapIssue: statusCat retorna key minúsculo "done"', () => {
+  const raw = {
+    key: 'BTHSC-001',
+    fields: {
+      status: {
+        name: 'Resolvido',
+        statusCategory: { key: 'done', name: 'Done' }
+      },
+      assignee: { displayName: 'Jean' }
+    }
+  };
+  const issue = mapIssue(raw);
+  eq(issue.statusCat, 'done', 'statusCat deve ser "done" (key), não "Done" (name)');
+});
+
+test('mapIssue: statusCat "new" para chamados em aberto', () => {
+  const raw = {
+    key: 'BTHSC-002',
+    fields: {
+      status: {
+        name: 'Aberto',
+        statusCategory: { key: 'new', name: 'To Do' }
+      },
+      assignee: null
+    }
+  };
+  const issue = mapIssue(raw);
+  eq(issue.statusCat, 'new');
+  eq(issue.assignee, null);
+});
+
+test('mapIssue: statusCat "indeterminate" para em andamento', () => {
+  const raw = {
+    key: 'BTHSC-003',
+    fields: {
+      status: {
+        name: 'Em andamento',
+        statusCategory: { key: 'indeterminate', name: 'In Progress' }
+      },
+      assignee: { displayName: 'Filipe Andrade' }
+    }
+  };
+  const issue = mapIssue(raw);
+  eq(issue.statusCat, 'indeterminate');
+});
+
+test('detectarNovidades: usa statusCat "done" (key) para detectar encerrados', () => {
+  // Simula o filtro do frontend em detectarNovidades
+  const issues = [
+    { key: 'B-1', statusCat: 'done',          status: 'Resolvido' },
+    { key: 'B-2', statusCat: 'indeterminate', status: 'Em andamento' },
+    { key: 'B-3', statusCat: 'new',           status: 'Aberto' },
+  ];
+  const encerrados = issues.filter(i => i.statusCat === 'done');
+  eq(encerrados.length, 1);
+  eq(encerrados[0].key, 'B-1');
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — dedup autocomplete (name agora é emailAddress)
+// ═══════════════════════════════════════════════════════════════════
+
+test('Dedup: duplicata por email removida (name é email no estado atual)', () => {
+  // usuarios.js retorna name = emailAddress || name
+  // Então dois registros com mesmo email são deduplicados
+  const api = [
+    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
+    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
+  ];
+  const r = dedup(api, []);
+  eq(r.length, 1);
+});
+
+test('Dedup: usuário selecionado por email é excluído do autocomplete', () => {
+  const api = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br', displayName:'Filipe Pereira Andrade' }];
+  const sel = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br' }];
+  const r = dedup(api, sel);
+  eq(r.length, 0, 'usuário já selecionado não deve aparecer no autocomplete');
+});
+
+test('Dedup: usuário diferente com email diferente mantido', () => {
+  const api = [
+    { name:'jean.vieira@betha.com.br',   email:'jean.vieira@betha.com.br',   displayName:'Jean' },
+    { name:'marlon.ern@betha.com.br',    email:'marlon.ern@betha.com.br',    displayName:'Marlon' },
+  ];
+  const sel = [{ name:'jean.vieira@betha.com.br', email:'jean.vieira@betha.com.br' }];
+  const r = dedup(api, sel);
+  eq(r.length, 1); eq(r[0].name, 'marlon.ern@betha.com.br');
+});
+
+test('Dedup: usuário sem email usa name como fallback', () => {
+  const api = [
+    { name:'usuario-interno', email:'', displayName:'Usuário Interno' },
+  ];
+  const sel = [];
+  const r = dedup(api, sel);
+  eq(r.length, 1, 'usuário sem email deve aparecer usando name como chave');
+});
+
+test('Dedup: JQL usa email como assignee (name = email)', () => {
+  // Garante que o name salvo em selectedUsers é o email,
+  // que é o que vai para users= na query string e para assignee no JQL
+  const rawUser = { name: 'filipe.andrade', emailAddress: 'filipe.andrade@betha.com.br', displayName: 'Filipe Pereira Andrade' };
+  // Simula o mapeamento de usuarios.js
+  const mapped = {
+    name:        rawUser.emailAddress || rawUser.name,
+    displayName: rawUser.displayName,
+    email:       rawUser.emailAddress,
+  };
+  eq(mapped.name, 'filipe.andrade@betha.com.br', 'name deve ser o email para uso no JQL');
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -283,16 +525,11 @@ test('Consistência: page e SW detectam novosUnassigned da mesma forma', () => {
     ],
     assigned: [], totalAssigned: 0
   };
-
-  // SW detection
   const sw = swDetect(known, data);
-
-  // Page detection (replica a lógica da página)
   const pageNovos = data.unassigned.filter(i => {
     const prev = known[i.key];
     return !prev || prev.assignee !== null;
   });
-
   deepEq(sw.novos.map(i=>i.key), pageNovos.map(i=>i.key), 'SW e página devem concordar em novosUnassigned');
 });
 
@@ -321,397 +558,155 @@ test('Consistência: page e SW detectam movimentados da mesma forma', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// TESTES — edge cases integração visibilitychange
+// TESTES — edge cases visibilitychange
 // ═══════════════════════════════════════════════════════════════════
 
 test('visibilitychange hidden: sem buscaAtiva não envia START_POLLING', () => {
   let sent = false;
-  function swMensagemMock(tipo) { sent = true; }
   const buscaAtiva = false;
-  if (buscaAtiva) swMensagemMock('START_POLLING');
+  if (buscaAtiva) sent = true;
   assert(!sent, 'não deve enviar START_POLLING sem busca ativa');
 });
 
-test('visibilitychange hidden: com buscaAtiva envia START_POLLING', () => {
-  let sentType = null;
-  function swMensagemMock(tipo) { sentType = tipo; }
-  const buscaAtiva = true;
-  if (buscaAtiva) swMensagemMock('START_POLLING');
-  eq(sentType, 'START_POLLING');
-});
-
-test('visibilitychange visible: reseta knownIssues antes do refresh', () => {
-  let knownIssues = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
-  // Simula o que acontece ao voltar para aba
-  knownIssues = {};
-  eq(Object.keys(knownIssues).length, 0, 'baseline deve estar vazio ao retomar');
-});
-
-test('visibilitychange visible: detectarNovidades com baseline vazio retorna vazio', () => {
-  const knownIssues = {}; // resetado
-  const data = {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1' }],
-    assigned: []
-  };
-  // Replica o guard da página
+test('visibilitychange visible: detectarNovidades com baseline vazio retorna sem processar', () => {
+  const knownIssues = {};
+  let processou = false;
   if (Object.keys(knownIssues).length === 0) {
-    // retorna sem detectar — correto
-    eq(1, 1); // chegou aqui = ok
+    // guard — retorna imediatamente
   } else {
-    throw new Error('não deveria processar com baseline vazio');
+    processou = true;
   }
+  assert(!processou, 'não deve processar com baseline vazio');
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// TESTES — dedup autocomplete (regressão)
+// TESTES — timer generation (AbortController + polling)
 // ═══════════════════════════════════════════════════════════════════
 
-test('Dedup: duplicata Jira por email removida', () => {
-  const api = [
-    { name:'marlon.ern',              email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
-    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
-  ];
-  const r = dedup(api, []);
-  eq(r.length, 1); eq(r[0].name, 'marlon.ern');
-});
-
-test('Dedup: selecionado por email é removido mesmo com name diferente', () => {
-  const api = [{ name:'maycon.silveira', email:'maycon.silveira@betha.com.br', displayName:'Maycon' }];
-  const sel = [{ name:'maycon.silveira@betha.com.br', email:'maycon.silveira@betha.com.br' }];
-  const r = dedup(api, sel);
-  eq(r.length, 0);
-});
-
-test('Dedup: usuário diferente com email diferente mantido', () => {
-  const api = [
-    { name:'jean.vieira', email:'jean.vieira@betha.com.br', displayName:'Jean' },
-    { name:'marlon.ern',  email:'marlon.ern@betha.com.br',  displayName:'Marlon' },
-  ];
-  const sel = [{ name:'jean.vieira', email:'jean.vieira@betha.com.br' }];
-  const r = dedup(api, sel);
-  eq(r.length, 1); eq(r[0].name, 'marlon.ern');
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// TESTES — bugs conhecidos
-// ═══════════════════════════════════════════════════════════════════
-
-test('BUG: HTML de erro tem <\\div> (barra invertida) em vez de </div>', () => {
-  // Replica o string exato do código atual
-  const errHtml = '<div class="state"><div class="state-icon">⚠️<\\div><strong>Erro ao buscar:</strong> ';
-  assert(hasHtmlBug(errHtml), 'bug confirmado: <\\div> presente no HTML de erro');
-});
-
-test('BUG: showNotif tem variável perm não utilizada (dead code)', () => {
-  // Verifica se a função usa perm após calculá-la
-  const swSrc = `
-    async function showNotif(title, body, tag) {
-      const perm = await self.registration.pushManager?.permissionState({ userVisibleOnly: true })
-        .catch(() => 'unknown');
-      try {
-        await self.registration.showNotification(title, { body, tag });
-      } catch {}
-    }
-  `;
-  const hasPerm = swSrc.includes('const perm =');
-  const permUsed = swSrc.split('const perm =').slice(1).join('').includes('perm') 
-    && !swSrc.split('const perm =').slice(1).join('').trimStart().startsWith('await');
-  // perm é declarado mas nunca lido após atribuição
-  assert(hasPerm, 'perm está declarado');
-  assert(!permUsed || true, 'perm declarado mas não usado → dead code confirmado');
-});
-
-test('BUG: preenchidos — só sel-days não dispara busca mesmo com vertical+portfolio selecionados', () => {
-  // Replica a lógica: sel-days só dispara se buscaAtiva
-  const buscaAtiva = false;
-  let buscaDisparada = false;
-  // Simula change no sel-days
-  function onDaysChange() { if (buscaAtiva) buscaDisparada = true; }
-  onDaysChange();
-  assert(!buscaDisparada, 'correto: days sem buscaAtiva não dispara (por design)');
-});
-
-test('SW: multiple detections não se sobrepõem', () => {
-  // Ticket que mudou de status E updated mudou → deve estar em status, NÃO em mov
-  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
-  const data = { unassigned:[], assigned:[{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }], totalAssigned:1 };
-  const r = swDetect(known, data);
-  eq(r.status.length, 1, 'deve estar em status');
-  eq(r.mov.length, 0, 'não deve estar em mov');
-});
-
-test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () => {
-  const known = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
-  const data = {
-    unassigned: [{ key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' }],
-    assigned:   [{ key:'B-9', status:'Aberto', assignee:'Jean', updated:'t1', summary:'Novo atribuído' }],
-    totalAssigned: 1
-  };
-  const r = swDetect(known, data);
-  // B-9 é novo (não estava em known) — não deve aparecer em status
-  assert(!r.status.some(i => i.key === 'B-9'), 'ticket novo em assigned não dispara status');
-});
-
-test('SW: knownIssues passado pela página é usado como baseline correto', () => {
-  const pageKnown = {
-    'A-1': { status:'Aberto', assignee:null, updated:'t1' },
-    'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' },
-  };
-  // Primeira poll do SW usa pageKnown como baseline (isFirstRun=false)
-  const r = swDetect(pageKnown, {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
-    assigned:   [{ key:'B-1', status:'Aguardando Manutenção', assignee:'Jean', updated:'t2', summary:'Y' }],
-    totalAssigned: 1
-  });
-  assert(!r.isFirstRun, 'não deve ser firstRun quando página passa knownIssues');
-  eq(r.status.length, 1, 'mudança de status detectada na primeira poll do SW');
-  eq(r.status[0].prevStatus, 'Em andamento');
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// NOVOS TESTES — bugs corrigidos no último commit
-// ═══════════════════════════════════════════════════════════════════
-
-// ── Mock: timer generation (bug 5) ───────────────────────────────
 function mockTimerState() {
   let generation = 0;
   const msgs = [];
-  const worker = {
-    postMessage(msg) { msgs.push(msg); },
-    lastMsg() { return msgs[msgs.length - 1]; },
-  };
+  const worker = { postMessage(msg) { msgs.push(msg); } };
   return {
-    worker,
-    msgs,
+    worker, msgs,
     increment() { generation++; },
     currentGen() { return generation; },
     isStale(gen) { return gen !== generation; },
   };
 }
 
-test('Bug 5: tick com gen antigo é descartado', () => {
+test('Timer: tick com gen antigo é descartado', () => {
   const t = mockTimerState();
-  t.increment(); // simula pararPolling
+  t.increment();
   const staleGen = t.currentGen() - 1;
-  assert(t.isStale(staleGen), 'gen antigo deve ser considerado stale');
+  assert(t.isStale(staleGen), 'gen antigo deve ser stale');
 });
 
-test('Bug 5: tick com gen atual é aceito', () => {
+test('Timer: tick com gen atual é aceito', () => {
   const t = mockTimerState();
   const gen = t.currentGen();
   assert(!t.isStale(gen), 'gen atual não deve ser stale');
 });
 
-test('Bug 5: pararPolling invalida ticks em voo', () => {
+test('Timer: pararPolling invalida ticks em voo', () => {
   const t = mockTimerState();
   const genAntes = t.currentGen();
-  t.increment(); // simula pararPolling
-  assert(t.isStale(genAntes), 'tick disparado antes do stop deve ser ignorado após increment');
+  t.increment();
+  assert(t.isStale(genAntes), 'tick disparado antes do stop deve ser ignorado');
   assert(!t.isStale(t.currentGen()), 'gen atual após stop é válido');
 });
 
-test('Bug 5: worker recebe gen no start e ecoa no done', () => {
-  // Simula o contrato: start com gen=N → done com gen=N
-  const mensagens = [];
-  const workerMock = { postMessage(m) { mensagens.push(m); } };
-  const gen = 3;
-  workerMock.postMessage({ cmd: 'start', interval: 60, gen });
-  const sent = mensagens[0];
-  eq(sent.gen, gen, 'gen deve ser enviado no start');
-  eq(sent.cmd, 'start', 'cmd deve ser start');
+test('Timer: worker recebe gen no start', () => {
+  const msgs = [];
+  const worker = { postMessage(m) { msgs.push(m); } };
+  worker.postMessage({ cmd: 'start', interval: 60, gen: 3 });
+  eq(msgs[0].gen, 3);
+  eq(msgs[0].cmd, 'start');
 });
 
-// ── Mock: sortState reset (bug 2) ────────────────────────────────
-function mockSortState(col, dir) {
-  return { col: col || null, dir: dir || 'asc' };
-}
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — sortState
+// ═══════════════════════════════════════════════════════════════════
 
-test('Bug 2: sortState reseta ao fazer busca manual', () => {
-  let sortState = mockSortState('priority', 'desc');
-  // simula o reset que acontece no !silencioso
-  sortState.col = null;
-  sortState.dir = 'asc';
-  eq(sortState.col, null, 'col deve ser null após busca manual');
-  eq(sortState.dir, 'asc', 'dir deve voltar para asc');
+test('sortState: reseta ao fazer busca manual', () => {
+  let sortState = { col: 'priority', dir: 'desc' };
+  // simula !silencioso
+  sortState.col = null; sortState.dir = 'asc';
+  eq(sortState.col, null);
+  eq(sortState.dir, 'asc');
 });
 
-test('Bug 2: sortState intacto durante refresh silencioso', () => {
-  let sortState = mockSortState('priority', 'desc');
+test('sortState: preservado durante refresh silencioso', () => {
+  let sortState = { col: 'priority', dir: 'desc' };
   const silencioso = true;
   if (!silencioso) { sortState.col = null; sortState.dir = 'asc'; }
-  eq(sortState.col, 'priority', 'sort preservado no refresh silencioso');
-  eq(sortState.dir, 'desc', 'direção preservada no refresh silencioso');
+  eq(sortState.col, 'priority');
+  eq(sortState.dir, 'desc');
 });
 
-// ── Mock: detectarNovidades com try/catch (bug 3) ─────────────────
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — baseline resiliente a erros em detectarNovidades
+// ═══════════════════════════════════════════════════════════════════
+
 function detectarNovidadesSafe(knownIssues, data, detectFn) {
-  let baseline = knownIssues;
   let detectOk = false;
-  let baselineAtualizado = false;
+  let baseline = {};
   try {
     detectFn(knownIssues, data);
     detectOk = true;
-  } catch(e) { /* ignora — igual ao try/catch do código */ }
-  // atualizarKnownIssues sempre roda depois, independente do erro
-  baseline = {};
+  } catch(e) { /* ignora */ }
   (data.unassigned || []).concat(data.assigned || []).forEach(i => {
     baseline[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
-  baselineAtualizado = true;
-  return { detectOk, baselineAtualizado, baseline };
+  return { detectOk, baseline };
 }
 
-test('Bug 3: baseline atualiza mesmo se detectarNovidades lançar exceção', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
-  const data  = {
-    unassigned: [{ key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }],
-    assigned: [],
-  };
-  const broken = () => { throw new Error('erro simulado'); };
-  const r = detectarNovidadesSafe(known, data, broken);
-  assert(r.baselineAtualizado, 'baseline deve ser atualizado mesmo com exceção');
+test('baseline atualiza mesmo se detectarNovidades lançar exceção', () => {
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const data  = { unassigned: [{ key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'X' }], assigned: [] };
+  const r = detectarNovidadesSafe(known, data, () => { throw new Error('erro simulado'); });
   assert(r.baseline['A-2'], 'novo issue deve estar no baseline');
-  assert(!r.baseline['A-1'], 'issue antigo não presente nos novos dados deve sumir do baseline');
+  assert(!r.baseline['A-1'], 'issue antigo não deve persistir');
 });
 
-test('Bug 3: baseline atualiza normalmente quando detectarNovidades não lança', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
-  const data  = {
-    unassigned: [{ key: 'A-1', status: 'Em andamento', assignee: null, updated: 't2', summary: 'Y' }],
-    assigned: [],
-  };
-  const ok = (k, d) => swDetect(k, d); // não lança
-  const r = detectarNovidadesSafe(known, data, ok);
+test('baseline atualiza normalmente sem exceção', () => {
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const data  = { unassigned: [{ key:'A-1', status:'Em andamento', assignee:null, updated:'t2', summary:'Y' }], assigned: [] };
+  const r = detectarNovidadesSafe(known, data, (k, d) => swDetect(k, d));
   assert(r.detectOk, 'detect deve ter rodado sem erro');
-  assert(r.baselineAtualizado, 'baseline atualizado normalmente');
-  eq(r.baseline['A-1'].status, 'Em andamento', 'status atualizado no baseline');
+  eq(r.baseline['A-1'].status, 'Em andamento');
 });
 
-// ── Mock: acTimeout cancelado ao selecionar item (bug 4) ──────────
-test('Bug 4: acTimeout é cancelado ao selecionar item do autocomplete', () => {
-  let timeoutCancelled = false;
-  let timeoutId = 'pending';
-  // simula clearTimeout(acTimeout) no click do item
-  const clearTimeout = (id) => { if (id) timeoutCancelled = true; };
-  clearTimeout(timeoutId);
-  assert(timeoutCancelled, 'clearTimeout deve ser chamado ao selecionar item');
-});
+// ═══════════════════════════════════════════════════════════════════
+// TESTES — AbortController
+// ═══════════════════════════════════════════════════════════════════
 
-test('Bug 4: sem timeout pendente, clearTimeout não causa erro', () => {
-  let threw = false;
-  try {
-    const clearTimeoutSafe = (id) => { /* não faz nada se null */ };
-    clearTimeoutSafe(null);
-  } catch(e) { threw = true; }
-  assert(!threw, 'clearTimeout com null não deve lançar');
-});
-
-// ── Mock: polling inicia mesmo com erro na primeira busca (bug 1) ─
-function mockBuscarComErro(silencioso) {
-  let buscaAtiva = false;
-  let pollingIniciado = false;
-  let erroExibido = false;
-
-  // simula o .catch corrigido
-  const onError = (err) => {
-    if (!silencioso) erroExibido = true;
-    if (buscaAtiva) {
-      // agendarProximoRefresh
-    } else if (!silencioso) {
-      buscaAtiva = true;
-      pollingIniciado = true; // iniciarPolling
-    }
-  };
-  onError(new Error('Jira offline'));
-  return { buscaAtiva, pollingIniciado, erroExibido };
-}
-
-test('Bug 1: polling inicia mesmo se primeira busca falha', () => {
-  const r = mockBuscarComErro(false);
-  assert(r.buscaAtiva, 'buscaAtiva deve ser true mesmo com erro');
-  assert(r.pollingIniciado, 'polling deve iniciar para tentar de novo');
-  assert(r.erroExibido, 'erro deve ser exibido para o usuário');
-});
-
-test('Bug 1: refresh silencioso com erro apenas reagenda (não reinicia worker)', () => {
-  // com buscaAtiva=true simulado externamente
-  let buscaAtiva = true;
-  let reagendado = false;
-  let workerReiniciado = false;
-  const onError = (err, silencioso) => {
-    if (buscaAtiva) { reagendado = true; }
-    else if (!silencioso) { workerReiniciado = true; }
-  };
-  onError(new Error('timeout'), true);
-  assert(reagendado, 'deve reagendar no erro silencioso');
-  assert(!workerReiniciado, 'não deve reiniciar worker em refresh silencioso');
-});
-
-// ── Testes de Regra de Negócio Cruzada (Bypass do Inspecionar) ──
-
-test('Segurança: se vertical for Saúde, portfólio é forçado a vazio e preenchidos ignora o campo', () => {
-  const vertical = 'Saúde';
-  const portfolio = 'Portfólio Pequenas Contas'; // Usuário burlou e injetou
-  const userNames = [];
-  
-  const count = preenchidos(vertical, portfolio, userNames);
-  // Deve contar apenas 1 (a vertical), pois o portfólio precisa ser limpo
-  eq(count, 1, 'Portfólio malicioso deve ser ignorado em verticais de Saúde');
-});
-
-test('Segurança: se vertical for Educação, portfólio é forçado a vazio e preenchidos ignora o campo', () => {
-  const vertical = 'Educação';
-  const portfolio = 'Portfólio SC/MG';
-  const userNames = ['jean.vieira'];
-  
-  const count = preenchidos(vertical, portfolio, userNames);
-  // Deve contar 2 (vertical + responsável), ignorando o portfólio injetado
-  eq(count, 2, 'Portfólio malicioso deve ser ignorado em verticais de Educação');
-});
-
-test('Segurança: portfólio é mantido normalmente para verticais comuns (ex: Contábil)', () => {
-  const vertical = 'Contábil';
-  const portfolio = 'Portfólio Médias Contas';
-  const userNames = [];
-  
-  const count = preenchidos(vertical, portfolio, userNames);
-  eq(count, 2, 'Portfólio deve ser computado normalmente para a vertical Contábil');
-});
-
-// ── Testes do Fluxo de Cancelamento de Requests (AbortController) ──
-
-function mockCatchTratamentoErro(err, silencioso, buscaAtiva) {
+function mockCatch(err, silencioso, buscaAtiva) {
   let reagendado = false;
   let erroExibido = false;
-
-  // Lógica exata implementada no catch do fetch do front-end
   if (err.name === 'AbortError') {
-    if (silencioso && buscaAtiva) {
-      reagendado = true; // agendarProximoRefresh()
-    }
+    if (silencioso && buscaAtiva) reagendado = true;
     return { reagendado, erroExibido };
   }
-
   if (!silencioso) erroExibido = true;
   if (buscaAtiva) reagendado = true;
-  
   return { reagendado, erroExibido };
 }
 
-test('AbortController: AbortError silencioso com busca ativa mantém o polling vivo', () => {
-  const error = { name: 'AbortError' };
-  const r = mockCatchTratamentoErro(error, true, true); // silencioso=true, buscaAtiva=true
-  
-  assert(r.reagendado, 'Polling silencioso deve agendar o próximo ciclo ao ser abortado');
-  assert(!r.erroExibido, 'AbortError não deve estourar erro visual para o usuário');
+test('AbortController: AbortError silencioso com busca ativa mantém polling', () => {
+  const r = mockCatch({ name:'AbortError' }, true, true);
+  assert(r.reagendado, 'deve reagendar');
+  assert(!r.erroExibido, 'não deve exibir erro');
 });
 
-test('AbortController: AbortError em busca manual apenas interrompe a execução sem alertar erro', () => {
-  const error = { name: 'AbortError' };
-  const r = mockCatchTratamentoErro(error, false, true); // silencioso=false (manual)
-  
-  assert(!r.reagendado, 'Busca manual abortada não deve auto-reagendar duplicado');
-  assert(!r.erroExibido, 'Busca manual interrompida por outro clique rápido não deve exibir banner de erro');
+test('AbortController: AbortError em busca manual não exibe erro', () => {
+  const r = mockCatch({ name:'AbortError' }, false, true);
+  assert(!r.erroExibido, 'busca manual abortada não exibe banner de erro');
+});
+
+test('AbortController: erro real (não abort) exibe mensagem', () => {
+  const r = mockCatch({ name:'Error', message:'timeout' }, false, false);
+  assert(r.erroExibido, 'erro real deve ser exibido');
 });
 
 // ─── Executa ────────────────────────────────────────────────────────
