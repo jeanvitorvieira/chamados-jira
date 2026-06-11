@@ -113,8 +113,9 @@ async function searchUsers(query, maxResults = 50) {
   // Deduplica pelo name
   const seen = new Set();
   return [...byUsername, ...byQuery].filter(u => {
-    if (seen.has(u.name)) return false;
-    seen.add(u.name);
+    const key = u.emailAddress || u.name;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
