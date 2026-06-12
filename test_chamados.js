@@ -17,7 +17,6 @@ function eq(a, b, msg)         { if (a !== b) throw new Error((msg||'') + ` -> E
 function deepEq(a, b, msg)     { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg||'') + `\n  Esperado: ${JSON.stringify(b)}\n  Obtido: ${JSON.stringify(a)}`); }
 function noThrow(fn, msg)      { try { fn(); } catch(e) { throw new Error((msg||'') + ': ' + e.message); } }
 function throws(fn, msg)       { let ok = false; try { fn(); } catch { ok = true; } if (!ok) throw new Error(msg || 'Deveria ter lançado uma exceção'); }
-
 function buildCurrent(unassigned, assigned) {
   const current = {};
   unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null, updated: i.updated }; });
@@ -108,6 +107,15 @@ function mapIssue(raw) {
   };
 }
 
+function validateTypesMock(typesParam) {
+  if (!typesParam || !typesParam.trim()) return [];
+  return typesParam.split(',')
+    .map(t => t.trim())
+    .filter(Boolean)
+    .slice(0, 150)
+    .map(t => t.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+}
+
 function mockTimerState() {
   let generation = 0;
   const msgs = [];
@@ -145,14 +153,14 @@ function detectarNovidadesSafe(knownIssues, data, detectFn) {
   return { detectOk, baseline };
 }
 
-test('SW: baseline vazio no arranque inicial -> isFirstRun=true, sem notificações', () => {
+test('SW: baseline vazio na execução inicial -> isFirstRun=true, sem notificações', () => {
   const r = swDetect({}, {
     unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
     assigned: []
   });
   assert(r.isFirstRun, 'Deveria identificar o primeiro ciclo como baseline');
-  eq(r.novos.length, 0, 'Não deve alertar sobre chamados existentes no arranque inicial');
-  eq(r.current['A-1'].assignee, null, 'Deve guardar os chamados atuais');
+  eq(r.novos.length, 0, 'Não deve alertar sobre chamados existentes na execução inicial');
+  eq(r.current['A-1'].assignee, null, 'Deve salvar os chamados atuais');
 });
 
 test('SW: baseline inicial preenche o estado current corretamente', () => {
@@ -173,7 +181,7 @@ test('SW: novo chamado sem responsável é devidamente sinalizado', () => {
       { key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'Novo' },
     ], assigned: []
   });
-  eq(r.novos.length, 1, 'Deve detetar exatamente um novo chamado');
+  eq(r.novos.length, 1, 'Deve detectar exatamente um novo chamado');
   eq(r.novos[0].key, 'A-2', 'O chamado A-2 é o novo chamado sem responsável');
 });
 
@@ -196,7 +204,7 @@ test('SW: ticket sem responsável inalterado NÃO dispara', () => {
   eq(r.novos.length, 0);
 });
 
-test('SW: mudança de status detetada', () => {
+test('SW: mudança de status detectada', () => {
   const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [],
@@ -238,7 +246,7 @@ test('SW: ticket coberto por statusAlterado não entra em movimentação', () =>
   eq(r.mov.length, 0, 'mudança de status não deve duplicar em mov');
 });
 
-test('SW: desaparecidos detetados quando o resultado não for truncado', () => {
+test('SW: desaparecidos detectados quando o resultado não for truncado', () => {
   const known = {
     'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
     'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
@@ -274,7 +282,7 @@ test('SW: unassigned não conta como desaparecido', () => {
   assert(!r.desap.includes('A-1'), 'unassigned não deve aparecer em desap');
 });
 
-test('SW: múltiplas deteções não se sobrepõem', () => {
+test('SW: múltiplas detecções não se sobrepõem', () => {
   const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const data = { unassigned:[], assigned:[{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }], totalAssigned:1 };
   const r = swDetect(known, data);
@@ -290,7 +298,7 @@ test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () =>
     totalAssigned: 1
   };
   const r = swDetect(known, data);
-  assert(!r.status.some(i => i.key === 'B-9'), 'ticket novo em assigned não dispara status');
+  assert(!r.status.some(i => i.key === 'B-9'), 'ticket novo in assigned não dispara status');
 });
 
 test('SW: knownIssues passado pela página é usado como baseline correto', () => {
@@ -304,7 +312,7 @@ test('SW: knownIssues passado pela página é usado como baseline correto', () =
     totalAssigned: 1
   });
   assert(!r.isFirstRun, 'não deve ser firstRun quando página passa knownIssues');
-  eq(r.status.length, 1, 'mudança de status detetada na primeira poll do SW');
+  eq(r.status.length, 1, 'mudança de status detectada na primeira poll do SW');
   eq(r.status[0].prevStatus, 'Em andamento');
 });
 
@@ -397,7 +405,7 @@ test('preenchidos: só vertical = 1 (insuficiente)', () => {
 });
 
 test('preenchidos: vertical + portfolio + equipe + responsável = 4', () => {
-  eq(preenchidos('Contábil', 'Portfólio Pequenas Contas', 'Suporte', ['jean@betha.com.br']), 4);
+  eq(preenchidos('Contábil', 'Portfólio Pequenas Contas', 'Suporte', ['jean.vieira@betha.com.br']), 4);
 });
 
 test('Segurança: Saúde força portfólio vazio, conta apenas 1 sem responsável', () => {
@@ -491,14 +499,14 @@ test('Dedup: duplicado por e-mail removido (name é e-mail no estado atual)', ()
   eq(r.length, 1);
 });
 
-test('Dedup: utilizador selecionado por e-mail é excluído do autocomplete', () => {
+test('Dedup: usuário selecionado por e-mail é excluído do autocomplete', () => {
   const api = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br', displayName:'Filipe Pereira Andrade' }];
   const sel = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br' }];
   const r = dedup(api, sel);
-  eq(r.length, 0, 'utilizador já selecionado não deve aparecer no autocomplete');
+  eq(r.length, 0, 'usuário já selecionado não deve aparecer no autocomplete');
 });
 
-test('Dedup: utilizador diferente com e-mail diferente mantido', () => {
+test('Dedup: usuário diferente com e-mail diferente mantido', () => {
   const api = [
     { name:'jean.vieira@betha.com.br',   email:'jean.vieira@betha.com.br',   displayName:'Jean' },
     { name:'marlon.ern@betha.com.br',    email:'marlon.ern@betha.com.br',    displayName:'Marlon' },
@@ -508,13 +516,13 @@ test('Dedup: utilizador diferente com e-mail diferente mantido', () => {
   eq(r.length, 1); eq(r[0].name, 'marlon.ern@betha.com.br');
 });
 
-test('Dedup: utilizador sem e-mail usa name como fallback', () => {
+test('Dedup: usuário sem e-mail usa name como fallback', () => {
   const api = [
     { name:'usuario-interno', email:'', displayName:'Usuário Interno' },
   ];
   const sel = [];
   const r = dedup(api, sel);
-  eq(r.length, 1, 'utilizador sem email deve aparecer usando name como chave');
+  eq(r.length, 1, 'usuário sem email deve aparecer usando name como chave');
 });
 
 test('Dedup: JQL usa e-mail como assignee (name = e-mail)', () => {
@@ -527,7 +535,7 @@ test('Dedup: JQL usa e-mail como assignee (name = e-mail)', () => {
   eq(mapped.name, 'filipe.andrade@betha.com.br', 'name deve ser o email para uso no JQL');
 });
 
-test('Consistência: página e SW detetam novosUnassigned da mesma forma', () => {
+test('Consistência: página e SW detectam novosUnassigned da mesma forma', () => {
   const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
   const data = {
     unassigned: [
@@ -544,7 +552,7 @@ test('Consistência: página e SW detetam novosUnassigned da mesma forma', () =>
   deepEq(sw.novos.map(i=>i.key), pageNovos.map(i=>i.key), 'SW e página devem concordar em novosUnassigned');
 });
 
-test('Consistência: página e SW detetam statusAlterado da mesma forma', () => {
+test('Consistência: página e SW detectam statusAlterado da mesma forma', () => {
   const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const data = {
     unassigned: [],
@@ -557,7 +565,7 @@ test('Consistência: página e SW detetam statusAlterado da mesma forma', () => 
   eq(sw.status[0]?.key, pageStatus[0]?.key);
 });
 
-test('Consistência: página e SW detetam movimentados da mesma forma', () => {
+test('Consistência: página e SW detectam movimentados da mesma forma', () => {
   const known = { 'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
   const data = {
     unassigned: [],
@@ -592,7 +600,7 @@ test('Timer: tick com gen antigo é descartado', () => {
   assert(t.isStale(staleGen), 'gen antigo deve ser stale');
 });
 
-test('Timer: tick com gen atual é aceite', () => {
+test('Timer: tick com gen atual é aceito', () => {
   const t = mockTimerState();
   const gen = t.currentGen();
   assert(!t.isStale(gen), 'gen atual não deve ser stale');
@@ -677,6 +685,15 @@ test('Filtragem em memória: tipos excluídos indesejados são expurgados com su
   eq(filtrados[0].key, 'CH-1', 'O tipo indesejado Sub-tarefa deve ser expurgado com segurança');
 });
 
+test('Filtro de Tipos: validação permite até 150 tipos (Prevenção do bug do corte alfabético)', () => {
+  const muitosTipos = Array.from({ length: 160 }, (_, i) => `Tipo${i}`).join(',');
+  const resultado = validateTypesMock(muitosTipos);
+  
+  eq(resultado.length, 150, 'A validação deve limitar e processar no máximo 150 tipos (antigo limite de 50)');
+  eq(resultado[0], 'Tipo0', 'O primeiro tipo deve ser o Tipo0');
+  eq(resultado[149], 'Tipo149', 'O 150º tipo deve ser mantido antes do corte limítrofe');
+});
+
 console.log('Executando os testes de integração e regressão...\n');
 results.forEach(r => {
   if (r.ok) console.log(`  ✅ [Passou] ${r.name}`);
@@ -692,5 +709,5 @@ console.log(`Total: ${passed + failed} | ✅ ${passed} passaram | ❌ ${failed} 
 if (failed > 0) {
   process.exit(1);
 } else {
-  console.log('Todos os testes foram executados com absoluto sucesso!');
+  console.log('Todos os testes foram executados com absoluto sucesso em pt-BR!');
 }
