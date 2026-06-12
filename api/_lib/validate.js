@@ -27,7 +27,7 @@ function validateTypes(typesParam) {
   return typesParam.split(',')
     .map(t => t.trim())
     .filter(Boolean)
-    .slice(0, 50)
+    .slice(0, 150)
     .map(t => escapeJqlValue(t));
 }
 

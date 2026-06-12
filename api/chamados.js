@@ -45,7 +45,7 @@ module.exports = async function handler(req, res) {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-    .slice(0, 50);
+    .slice(0, 150);
 
   const selectedTypeIds = rawTypes.filter(s => /^\d+$/.test(s));
   const selectedTypes   = rawTypes.filter(s => !/^\d+$/.test(s)).map(t => validateTypes(t)[0]).filter(Boolean);
