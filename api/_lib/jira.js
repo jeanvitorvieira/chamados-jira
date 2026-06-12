@@ -43,17 +43,28 @@ async function request(path, options = {}) {
       throw new JiraError(`HTTP ${response.status}`, response.status, detail);
     }
 
-    return response.json();
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      throw new JiraError('Resposta inválida do Jira (JSON malformado)', response.status, text.slice(0, 500));
+    }
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
-  return request('/rest/api/2/search', {
+  const data = await request('/rest/api/2/search', {
     method: 'POST',
     body: JSON.stringify({ jql, fields, maxResults: pageSize, startAt }),
   });
+  return {
+    issues: data.issues ?? [],
+    total:  data.total  ?? 0,
+    ...data,
+  };
 }
 
 async function searchUsers(query, maxResults = 50) {
