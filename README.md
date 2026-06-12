@@ -234,8 +234,8 @@ Retorna chamados abertos agrupados em sem responsável e atribuídos.
 | portfolio   | string | Não         | Portfólio (whitelist)                  |
 | cf[21500]   | string | Não         | Equipe Responsável (whitelist)         |
 | users       | string | Não         | CSV de e-mails/usernames — máx. 10     |
-| typeIds     | string | Não         | CSV de IDs ou nomes de tipo — máx. 50  |
-| days        | number | Não         | Período: 0, 30, 60 ou 90              |
+| typeIds     | string | Não         | CSV de IDs ou nomes de tipo — máx. 150 |
+| days        | number | Não         | Período: 0, 30, 60 ou 90               |
 
 > **Nota sobre `typeIds`:** quando omitido ou quando todos os tipos estão selecionados, o filtro não é aplicado e todos os tipos são retornados. Envie apenas em seleção parcial.
 
