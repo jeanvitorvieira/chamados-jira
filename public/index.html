@@ -752,10 +752,17 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-size: 14px;
+      font-size: 12px;
       cursor: pointer;
       font-weight:600;
-      color:var(--text-primary);cursor:pointer
+      color:var(--text-primary);
+      cursor:pointer
+    }
+
+    @media (max-width: 1226px) {
+      .checkbox-container span{
+      width: 55%;
+      }
     }
 
     .help-icon {
