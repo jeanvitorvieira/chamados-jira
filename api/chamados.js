@@ -13,6 +13,7 @@ const FIELDS = [
   'customfield_10300',
   'customfield_10132',
   'customfield_21500',
+  'security'
 ];
 
 const NOMES_TIPOS_EXCLUIDOS = [
@@ -52,6 +53,7 @@ module.exports = async function handler(req, res) {
   
   const days            = validateDays(req.query.days);
   const users           = validateUsers(req.query.users || req.query.user || '');
+  const mostrarParceiros  = req.query.mostrarParceiros === 'true';
 
   const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
   const jqlAssigned   = users.length > 0
@@ -64,13 +66,17 @@ module.exports = async function handler(req, res) {
       jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
     ]);
 
+    const filtrarParceiro = i => mostrarParceiros || !i.isParceiro;
+
     const unassigned = (dataUnassigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
+      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(filtrarParceiro);
 
     const assigned = (dataAssigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
+      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(filtrarParceiro);
 
     return res.status(200).json({
       ok:              true,
@@ -136,6 +142,8 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
 
 function mapIssue(raw) {
   const f = raw.fields;
+  const nivelSeguranca = f.security?.name ?? '';
+  
   return {
     key:       raw.key,
     summary:   f.summary,
@@ -149,6 +157,7 @@ function mapIssue(raw) {
     sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
     equipe:    f.customfield_21500?.value ?? null, 
+    isParceiro: nivelSeguranca.toLowerCase().includes('parceiro'),
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,
   };
 }
