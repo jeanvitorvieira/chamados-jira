@@ -747,6 +747,58 @@
       flex-shrink: 0;
     }
 
+    .checkbox-container {
+      text-transform:none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight:600;
+      color:var(--text-primary);cursor:pointer
+    }
+
+    .help-icon {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background-color: #e0e0e0;
+      color: #555;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: help;
+    }
+
+    .help-icon .tooltip {
+      opacity: 0;
+      visibility: hidden;
+      width: 450px;
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: normal;
+      
+      position: absolute;
+      bottom: 125%; 
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+
+    .help-icon:hover .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+
     .user-tags-wrap {
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
@@ -1045,8 +1097,13 @@
         </div>
         <div class="form-group-checkbox">
           <input type="checkbox" id="chk-parceiros" style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
-          <label for="chk-parceiros" style="text-transform:none;font-size:13px;font-weight:600;color:var(--text-primary);cursor:pointer">
-            Mostrar chamados de parceiros
+          <label class="checkbox-container" for="chk-parceiros">
+            <span>Mostrar chamados de parceiros</span>
+
+            <div class="help-icon">
+            ?
+            <span class="tooltip">Serão considerados chamados com nível de segurança de qualquer parceiro.</span>
+          </div>
           </label>
       </div>
       </div>
