@@ -244,6 +244,14 @@
       gap: 5px;
     }
 
+    .form-group-checkbox {
+      display: flex;
+      flex-direction:row;
+      justify-content:center;
+      align-items:center;
+      gap: 8px;
+    }
+
     .form-group label {
       font-size: 11px;
       font-weight: 600;
@@ -263,11 +271,20 @@
       outline: none;
       transition: border-color .15s;
       width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position-x: right;
+      background-position-y: center;
     }
 
+    .form-group select:hover,
+    .form-group input:hover,
     .form-group select:focus,
     .form-group input:focus {
       border-color: var(--blue-mid);
+      cursor: pointer;
     }
 
     select:disabled {
@@ -615,11 +632,10 @@
       display: block;
     }
 
-    .filters-grid-2 {
+    .filters-grid-3 {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 0.5fr;
       gap: 12px;
-      align-items: end;
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid var(--gray-border);
@@ -643,21 +659,17 @@
       justify-content: space-between;
       align-items: center;
       transition: border-color .15s;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position-x: right;
+      background-position-y: center;
     }
 
     .multiselect-btn:hover,
     .multiselect-btn.open {
       border-color: var(--blue-mid);
-    }
-
-    .multiselect-btn .arrow {
-      font-size: 10px;
-      color: var(--text-secondary);
-      transition: transform .15s;
-    }
-
-    .multiselect-btn.open .arrow {
-      transform: rotate(180deg);
     }
 
     .multiselect-badge {
@@ -1000,7 +1012,7 @@
           Agora</button>
       </div>
 
-      <div class="filters-grid-2">
+      <div class="filters-grid-3">
         <div class="form-group">
           <label title="Filtra chamados com qualquer movimentação no período selecionado">Atualizado nos últimos
             ↕</label>
@@ -1016,7 +1028,6 @@
           <div class="multiselect-wrap" id="tipo-wrap">
             <button type="button" class="multiselect-btn" id="tipo-btn" onclick="toggleTipoDropdown()">
               <span id="tipo-label">Todos os tipos</span>
-              <span class="arrow">▼</span>
             </button>
             <div class="multiselect-dropdown" id="tipo-dropdown">
               <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
@@ -1032,6 +1043,12 @@
             </div>
           </div>
         </div>
+        <div class="form-group-checkbox">
+          <input type="checkbox" id="chk-parceiros" style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
+          <label for="chk-parceiros" style="text-transform:none;font-size:13px;font-weight:600;color:var(--text-primary);cursor:pointer">
+            Mostrar chamados de parceiros
+          </label>
+      </div>
       </div>
     </div>
 
@@ -1081,6 +1098,13 @@
 
     var inpUser = document.getElementById('inp-user');
     var acList = document.getElementById('autocomplete-list');
+
+    var mostrarParceiros = false;
+
+    document.getElementById('chk-parceiros').addEventListener('change', function () {
+      mostrarParceiros = this.checked;
+      if (buscaAtiva) buscar();
+    });
 
     function escHtml(s) {
       return String(s == null ? '' : s)
@@ -1134,8 +1158,6 @@
       var items = acList.querySelectorAll('.autocomplete-item');
       var arr = Array.prototype.slice.call(items);
       var idx = arr.findIndex(function (i) { return i.classList.contains('selected'); });
-      if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(items, idx + 1); }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setAcFocus(items, idx - 1); }
       if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].click(); }
       if (e.key === 'Escape') { acList.classList.remove('open'); inpUser.blur(); }
     });
@@ -1365,7 +1387,6 @@
         if (!existing) {
           var b = document.createElement('span');
           b.className = 'multiselect-badge';
-          btn.querySelector('.arrow').before(b);
         }
         btn.querySelector('.multiselect-badge').textContent = tiposSelected.size;
       }
@@ -1432,6 +1453,7 @@
       if (portfolio) params.set('portfolio', portfolio);
       if (equipe) params.set('cf[21500]', equipe);
       if (userNames.length) params.set('users', userNames.join(','));
+      if (mostrarParceiros) params.set('mostrarParceiros', 'true');
 
       var arrTypeKeys = [];
       tiposSelected.forEach(function (k) { arrTypeKeys.push(k); });
@@ -1812,6 +1834,7 @@
           days: document.getElementById('sel-days').value,
           tipos: arrTypeKeys,
           users: selectedUsers,
+          mostrarParceiros: mostrarParceiros,
         }));
       } catch (e) { }
     }
@@ -1840,6 +1863,10 @@
           f.users.forEach(function (u) { adicionarUserTag(u); });
         }
         if (f.tipos && f.tipos.length) pendingTiposRestore = f.tipos;
+        if (f.mostrarParceiros) {
+          mostrarParceiros = true;
+          document.getElementById('chk-parceiros').checked = true;
+        }
 
         var portfolio = document.getElementById('sel-portfolio').value;
         var vertical = document.getElementById('sel-vertical').value;
