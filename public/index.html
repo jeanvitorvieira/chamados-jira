@@ -279,6 +279,25 @@
       background-position-y: center;
     }
 
+    .form-group .multiselect-item input {
+      background-image: none;
+    }
+
+    .form-group .multiselect-item input:checked {
+      background-color: var(--blue-primary);
+      border-color: var(--blue-primary);
+      accent-color: var(--blue-primary);
+    }
+
+    #tipo-search {
+      width: 100%;
+      border: 1.5px solid var(--gray-border);
+      border-radius: var(--radius-sm);
+      padding: 6px 25px;
+      font-size: 12px;
+      outline: none;
+    }
+
     .form-group select:hover,
     .form-group input:hover,
     .form-group select:focus,
@@ -1093,9 +1112,7 @@
             </button>
             <div class="multiselect-dropdown" id="tipo-dropdown">
               <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
-                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off"
-                  style="width:100%;border:1.5px solid var(--gray-border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;outline:none;"
-                  oninput="filtrarTipos(this.value)">
+                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off" oninput="filtrarTipos(this.value)">
               </div>
               <div class="multiselect-actions">
                 <button onclick="selecionarTodosTipos()">Selecionar todos</button>
@@ -1620,6 +1637,7 @@
       'Aberto': '#EDE9FE',
       'Reaberto': '#FFEBEE'
     };
+
     var STATUS_COLOR = {
       'Aguardando Manutencao': '#7B5800',
       'Aguardando Manutenção': '#7B5800',
@@ -2032,7 +2050,6 @@
       document.getElementById('refresh-dot').classList.add('pulsing');
       document.getElementById('refresh-label').textContent = 'Atualiza em ' + refreshCountdown + 's';
     }
-
 
     function detectarNovidades(data) {
       if (Object.keys(knownIssues).length === 0) return;
