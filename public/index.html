@@ -279,6 +279,25 @@
       background-position-y: center;
     }
 
+    .form-group .multiselect-item input {
+      background-image: none;
+    }
+
+    .form-group .multiselect-item input:checked {
+      background-color: var(--blue-primary);
+      border-color: var(--blue-primary);
+      accent-color: var(--blue-primary);
+    }
+
+    #tipo-search {
+      width: 100%;
+      border: 1.5px solid var(--gray-border);
+      border-radius: var(--radius-sm);
+      padding: 6px 25px;
+      font-size: 12px;
+      outline: none;
+    }
+
     .form-group select:hover,
     .form-group input:hover,
     .form-group select:focus,
@@ -620,18 +639,6 @@
       color: var(--orange-dark);
     }
 
-    .form-group .inp-hint {
-      font-size: 11px;
-      color: var(--orange-dark);
-      margin-top: 3px;
-      display: none;
-    }
-
-    .inp-warn~.inp-hint,
-    input.inp-warn+input+.inp-hint {
-      display: block;
-    }
-
     .filters-grid-3 {
       display: grid;
       grid-template-columns: 1fr 1fr 0.5fr;
@@ -649,7 +656,7 @@
       width: 100%;
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
-      padding: 9px 12px;
+      padding: 9px 20px;
       font-size: 13px;
       color: var(--text-primary);
       background: var(--white);
@@ -1094,9 +1101,7 @@
             </button>
             <div class="multiselect-dropdown" id="tipo-dropdown">
               <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
-                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off"
-                  style="width:100%;border:1.5px solid var(--gray-border);border-radius:var(--radius-sm);padding:6px 10px;font-size:12px;outline:none;"
-                  oninput="filtrarTipos(this.value)">
+                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off" oninput="filtrarTipos(this.value)">
               </div>
               <div class="multiselect-actions">
                 <button onclick="selecionarTodosTipos()">Selecionar todos</button>
@@ -1153,7 +1158,6 @@
     var acTimeout = null;
     var selectedUsers = [];
     var buscaAtiva = false;
-    var autoRefreshTimer = null;
     var refreshCountdown = 0;
     var REFRESH_INTERVAL = 60;
     var timerWorker = null;
@@ -1190,7 +1194,10 @@
     }
 
     fetch('/api/tipos')
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then(function (data) {
         setBadge(data.ok);
         if (data.ok && data.tipos) initTipos(data.tipos);
@@ -1226,6 +1233,8 @@
       var items = acList.querySelectorAll('.autocomplete-item');
       var arr = Array.prototype.slice.call(items);
       var idx = arr.findIndex(function (i) { return i.classList.contains('selected'); });
+      if (e.key === 'ArrowDown') { e.preventDefault(); setAcFocus(items, Math.min(idx + 1, items.length - 1)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setAcFocus(items, Math.max(idx - 1, 0)); }
       if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); items[idx].click(); }
       if (e.key === 'Escape') { acList.classList.remove('open'); inpUser.blur(); }
     });
@@ -1240,7 +1249,10 @@
       inpUser.style.backgroundRepeat = 'no-repeat';
       inpUser.style.backgroundPosition = 'right 10px center';
       fetch('/api/usuarios?q=' + encodeURIComponent(q))
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(function (data) {
           var seenNames = {};
           var seenEmails = {};
@@ -1355,7 +1367,7 @@
           if (cb.checked) tiposSelected.add(key);
           else tiposSelected.delete(key);
           atualizarTipoLabel();
-          if (buscaAtiva) buscar();
+          buscar();
         });
         label.appendChild(cb);
         label.appendChild(document.createTextNode(name));
@@ -1374,8 +1386,6 @@
       }
 
       atualizarTipoLabel();
-
-      if (buscaAtiva && tiposSelected.size > 0) buscar();
 
       if (pendingAutoSearch) {
         pendingAutoSearch = false;
@@ -1424,14 +1434,14 @@
         if (cb) { cb.checked = true; tiposSelected.add(cb.value); }
       });
       atualizarTipoLabel();
-      if (buscaAtiva) buscar();
+      buscar();
     }
 
     function limparTipos() {
       tiposSelected.clear();
       document.querySelectorAll('#tipo-items input[type=checkbox]').forEach(function (cb) { cb.checked = false; });
       atualizarTipoLabel();
-      if (buscaAtiva) buscar();
+      buscar();
     }
 
     function atualizarTipoLabel() {
@@ -1451,12 +1461,13 @@
         label.textContent = tiposSelected.size === 1
           ? nomes[0]
           : tiposSelected.size + ' tipos';
-        var existing = btn.querySelector('.multiselect-badge');
-        if (!existing) {
-          var b = document.createElement('span');
-          b.className = 'multiselect-badge';
+        var badge = btn.querySelector('.multiselect-badge');
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'multiselect-badge';
+          btn.appendChild(badge);
         }
-        btn.querySelector('.multiselect-badge').textContent = tiposSelected.size;
+        badge.textContent = tiposSelected.size;
       }
     }
 
@@ -1547,7 +1558,10 @@
       }
 
       fetch('/api/chamados?' + params.toString(), { signal: buscarController.signal })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
 
@@ -1621,6 +1635,7 @@
       'Aberto': '#EDE9FE',
       'Reaberto': '#FFEBEE'
     };
+
     var STATUS_COLOR = {
       'Aguardando Manutencao': '#7B5800',
       'Aguardando Manutenção': '#7B5800',
@@ -1657,7 +1672,6 @@
     }
 
     var sortState = { col: null, dir: 'asc' };
-    var SORT_KEYS = ['key', 'summary', 'portfolio', 'sistema', 'assignee', 'status', 'priority', 'type', 'updated'];
     var PRIORITY_ORDER = { 'Highest': 1, 'High': 2, 'Medium': 3, 'Low': 4, 'Lowest': 5 };
 
     function sortIssues(issues, col, dir) {
@@ -1982,7 +1996,7 @@
 
     function tempoFilaBadge(iso) {
       if (!iso) return '';
-      var horas = (Date.now() - new Date(iso).getTime()) / 3600000;
+      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);      
       var cls = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
       return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
     }
@@ -2012,13 +2026,11 @@
     function pararPolling() {
       timerGeneration++;
       if (timerWorker) { timerWorker.postMessage({ cmd: 'stop' }); }
-      if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
       var bar = document.getElementById('refresh-bar');
       if (bar) bar.style.display = 'none';
     }
 
     function agendarProximoRefresh() {
-      if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
       document.getElementById('refresh-bar').style.display = 'flex';
       refreshCountdown = REFRESH_INTERVAL;
       atualizarBarraRefresh();
@@ -2033,7 +2045,6 @@
       document.getElementById('refresh-dot').classList.add('pulsing');
       document.getElementById('refresh-label').textContent = 'Atualiza em ' + refreshCountdown + 's';
     }
-
 
     function detectarNovidades(data) {
       if (Object.keys(knownIssues).length === 0) return;
@@ -2115,7 +2126,10 @@
 
       if (desaparecidos.length > 0) {
         fetch('/api/issues?keys=' + desaparecidos.join(','))
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
           .then(function (data) {
             if (!data.ok) return;
             var encerrados = data.issues.filter(function (i) { return i.statusCat === 'done'; });
