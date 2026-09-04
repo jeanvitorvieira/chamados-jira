@@ -1167,6 +1167,7 @@
     var pendingTiposRestore = null;
     var pendingAutoSearch = false;
     var buscarController = null;
+    var pendingSortRestore = false;
 
     var inpUser = document.getElementById('inp-user');
     var acList = document.getElementById('autocomplete-list');
@@ -1206,7 +1207,6 @@
         setBadge(false);
         if (pendingAutoSearch) { pendingAutoSearch = false; buscar(); }
       });
-
 
     inpUser.addEventListener('input', function () {
       clearTimeout(acTimeout);
@@ -1548,8 +1548,12 @@
 
       if (!silencioso) {
         knownIssues = {};
-        sortState.col = null;
-        sortState.dir = 'asc';
+        if (pendingSortRestore) {
+          pendingSortRestore = false;
+        } else {
+          sortState.col = null;
+          sortState.dir = 'asc';
+        }
         document.getElementById('chips').style.display = 'none';
         document.getElementById('results').innerHTML =
           '<div class="state"><div class="spinner"></div>Buscando chamados no Jira...</div>';
@@ -1917,6 +1921,8 @@
           tipos: arrTypeKeys,
           users: selectedUsers,
           mostrarParceiros: mostrarParceiros,
+          sortCol: sortState.col,
+          sortDir: sortState.dir,
         }));
       } catch (e) { }
     }
@@ -1948,6 +1954,11 @@
         if (f.mostrarParceiros) {
           mostrarParceiros = true;
           document.getElementById('chk-parceiros').checked = true;
+        }
+        if (f.sortCol) {
+          sortState.col = f.sortCol;
+          sortState.dir = f.sortDir || 'asc';
+          pendingSortRestore = true;
         }
 
         var portfolio = document.getElementById('sel-portfolio').value;
