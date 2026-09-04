@@ -246,9 +246,9 @@
 
     .form-group-checkbox {
       display: flex;
-      flex-direction:row;
-      justify-content:center;
-      align-items:center;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
       gap: 8px;
     }
 
@@ -755,20 +755,20 @@
     }
 
     .checkbox-container {
-      text-transform:none;
+      text-transform: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       font-size: 12px;
       cursor: pointer;
-      font-weight:600;
-      color:var(--text-primary);
-      cursor:pointer
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer
     }
 
     @media (max-width: 1226px) {
-      .checkbox-container span{
-      width: 55%;
+      .checkbox-container span {
+        width: 55%;
       }
     }
 
@@ -801,14 +801,14 @@
       padding: 8px 12px;
       font-size: 12px;
       font-weight: normal;
-      
+
       position: absolute;
-      bottom: 125%; 
+      bottom: 125%;
       right: 0;
       left: auto;
       transform: none;
       z-index: 10;
-      
+
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
@@ -969,12 +969,38 @@
     }
 
     @keyframes highlightFade {
-      0% { background: #FFF3CD; }
-      100% { background: transparent; }
+      0% {
+        background: #FFF3CD;
+      }
+
+      100% {
+        background: transparent;
+      }
     }
 
     tbody tr.row-highlight {
       animation: highlightFade 3s ease-out;
+    }
+
+    .copy-link-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      padding: 2px 4px;
+      margin-left: 4px;
+      border-radius: 4px;
+      vertical-align: middle;
+    }
+
+    .copy-link-btn:hover {
+      background: var(--gray-bg);
+      color: var(--blue-mid);
+    }
+
+    .copy-link-btn.copied {
+      color: var(--green);
     }
   </style>
 </head>
@@ -1110,7 +1136,8 @@
             </button>
             <div class="multiselect-dropdown" id="tipo-dropdown">
               <div style="padding:8px 12px;border-bottom:1px solid var(--gray-bg)">
-                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off" oninput="filtrarTipos(this.value)">
+                <input type="text" id="tipo-search" placeholder="Pesquisar tipo..." autocomplete="off"
+                  oninput="filtrarTipos(this.value)">
               </div>
               <div class="multiselect-actions">
                 <button onclick="selecionarTodosTipos()">Selecionar todos</button>
@@ -1121,16 +1148,17 @@
           </div>
         </div>
         <div class="form-group-checkbox">
-          <input type="checkbox" id="chk-parceiros" style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
+          <input type="checkbox" id="chk-parceiros"
+            style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
           <label class="checkbox-container" for="chk-parceiros">
             <span>Mostrar chamados de parceiros</span>
 
             <div class="help-icon">
-            ?
-            <span class="tooltip">Serão considerados chamados com nível de segurança de qualquer parceiro.</span>
-          </div>
+              ?
+              <span class="tooltip">Serão considerados chamados com nível de segurança de qualquer parceiro.</span>
+            </div>
           </label>
-      </div>
+        </div>
       </div>
     </div>
 
@@ -1722,7 +1750,9 @@
       var rows = sorted.map(function (i) {
         var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
         return '<tr> data-key="' + escHtml(i.key) + '">' +
-          '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
+          '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a>' +
+          (safeUrl !== '#' ? '<button type="button" class="copy-link-btn" title="Copiar link" onclick="copiarLink(this,\'' + safeUrl.replace(/'/g, "\\'") + '\')">📋</button>' : '') +
+          '</td>' +
           '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
           '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
           '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.sistema || '—') + '</td>' +
@@ -2016,9 +2046,9 @@
 
     function tempoFilaBadge(iso) {
       if (!iso) return '';
-      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);      
+      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);
       var cls = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
-      return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
+      return '<span class="tempo-fila ' + cls + '" title="' + escHtml(fmtDate(iso)) + '">há ' + tempoRelativo(iso) + '</span>';
     }
 
     function iniciarPolling() {
@@ -2194,7 +2224,7 @@
         ' <button onclick="buscar()" style="margin-left:auto;background:' + s.btn + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
       document.getElementById('results').insertAdjacentElement('beforebegin', banner);
     }
- 
+
     function destacarLinhas(keys) {
       keys.forEach(function (key) {
         document.querySelectorAll('tr[data-key="' + CSS.escape(key) + '"]').forEach(function (tr) {
@@ -2204,7 +2234,20 @@
         });
       });
     }
- </script>
+
+    function copiarLink(btn, url) {
+      if (!url || url === '#') return;
+      navigator.clipboard.writeText(url).then(function () {
+        var original = btn.textContent;
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = original;
+          btn.classList.remove('copied');
+        }, 1500);
+      }).catch(function () { });
+    }
+  </script>
 </body>
 
 </html>
