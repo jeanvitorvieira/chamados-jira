@@ -967,6 +967,15 @@
         transform: translateY(0);
       }
     }
+
+    @keyframes highlightFade {
+      0% { background: #FFF3CD; }
+      100% { background: transparent; }
+    }
+
+    tbody tr.row-highlight {
+      animation: highlightFade 3s ease-out;
+    }
   </style>
 </head>
 
@@ -1712,7 +1721,7 @@
 
       var rows = sorted.map(function (i) {
         var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
-        return '<tr>' +
+        return '<tr> data-key="' + escHtml(i.key) + '">' +
           '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
           '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
           '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
@@ -2103,6 +2112,7 @@
           ? '1 novo chamado sem responsável: <strong>' + escHtml(novosUnassigned[0].key) + '</strong> — ' + escHtml(novosUnassigned[0].summary.slice(0, 60))
           : novosUnassigned.length + ' novos chamados sem responsável detectados';
         exibirBanner('🔔 ' + labelU, 'warning');
+        destacarLinhas(novosUnassigned.map(function (i) { return i.key; }));
       }
 
       if (statusAlterado.length > 0) {
@@ -2118,6 +2128,7 @@
           ? 'Status alterado em <strong>' + escHtml(statusAlterado[0].key) + '</strong>: ' + escHtml(statusAlterado[0].prevStatus) + ' → ' + escHtml(statusAlterado[0].status)
           : statusAlterado.length + ' chamados com status alterado';
         exibirBanner('🔄 ' + labelS, 'info');
+        destacarLinhas(statusAlterado.map(function (i) { return i.key; }));
       }
 
       if (movimentados.length > 0) {
@@ -2133,6 +2144,7 @@
           ? 'Movimentação em <strong>' + escHtml(movimentados[0].key) + '</strong> — ' + escHtml(movimentados[0].summary.slice(0, 60))
           : movimentados.length + ' chamados com movimentação recente';
         exibirBanner('📋 ' + labelM, 'info');
+        destacarLinhas(movimentados.map(function (i) { return i.key; }));
       }
 
       if (desaparecidos.length > 0) {
@@ -2182,7 +2194,17 @@
         ' <button onclick="buscar()" style="margin-left:auto;background:' + s.btn + ';color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700">Ver atualização</button>';
       document.getElementById('results').insertAdjacentElement('beforebegin', banner);
     }
-  </script>
+ 
+    function destacarLinhas(keys) {
+      keys.forEach(function (key) {
+        document.querySelectorAll('tr[data-key="' + CSS.escape(key) + '"]').forEach(function (tr) {
+          tr.classList.remove('row-highlight');
+          void tr.offsetWidth;
+          tr.classList.add('row-highlight');
+        });
+      });
+    }
+ </script>
 </body>
 
 </html>
