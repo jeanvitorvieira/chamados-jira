@@ -1749,7 +1749,7 @@
 
       var rows = sorted.map(function (i) {
         var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
-        return '<tr> data-key="' + escHtml(i.key) + '">' +
+        return '<tr data-key="' + escHtml(i.key) + '">' +
           '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a>' +
           (safeUrl !== '#' ? '<button type="button" class="copy-link-btn" title="Copiar link" onclick="copiarLink(this,\'' + safeUrl.replace(/'/g, "\\'") + '\')">📋</button>' : '') +
           '</td>' +
