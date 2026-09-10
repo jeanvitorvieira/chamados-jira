@@ -1167,8 +1167,6 @@
     var pendingAutoSearch = false;
     var pendingSortRestore = false;
     var buscarController = null;
-    var pendingSortRestore = false;
-    var buscarController = null;
 
     var inpUser = document.getElementById('inp-user');
     var acList = document.getElementById('autocomplete-list');
@@ -1714,10 +1712,8 @@
 
       var rows = sorted.map(function (i) {
         var safeUrl = (typeof i.url === 'string' && i.url.startsWith('https://')) ? escHtml(i.url) : '#';
-        return '<tr data-key="' + escHtml(i.key) + '">' +
-          '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a>' +
-          (safeUrl !== '#' ? '<button type="button" class="copy-link-btn" title="Copiar link" onclick="copiarLink(this,\'' + safeUrl.replace(/'/g, "\\'") + '\')">📋</button>' : '') +
-          '</td>' +
+        return '<tr>' +
+          '<td><a class="key-link" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + escHtml(i.key) + '</a></td>' +
           '<td style="max-width:400px">' + escHtml(i.summary) + '</td>' +
           '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + abrevPortfolio(i.portfolio) + '</td>' +
           '<td style="font-size:11px;color:var(--text-secondary);white-space:nowrap">' + escHtml(i.sistema || '—') + '</td>' +
