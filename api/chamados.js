@@ -124,10 +124,18 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
     clauses.push('issuetype not in subTaskIssueTypes()');
   }
 
-  if (portfolio) clauses.push(`cf[32400] = "${portfolio}"`);
-  if (vertical)  clauses.push(`cf[10300] = "${vertical}"`);
-  if (equipe)    clauses.push(`cf[21500] = "${equipe}"`); 
-  if (days > 0)  clauses.push(`updated >= -${days}d`);
+  if (portfolio && portfolio.length > 0) {
+    clauses.push(portfolio.length === 1
+      ? `cf[32400] = "${portfolio[0]}"`
+      : `cf[32400] in (${portfolio.map(p => `"${p}"`).join(', ')})`);
+  }
+  if (vertical && vertical.length > 0) {
+    clauses.push(vertical.length === 1
+      ? `cf[10300] = "${vertical[0]}"`
+      : `cf[10300] in (${vertical.map(v => `"${v}"`).join(', ')})`);
+  }
+  if (equipe) clauses.push(`cf[21500] = "${equipe}"`);
+  if (days > 0) clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
     clauses.push(users.length === 1

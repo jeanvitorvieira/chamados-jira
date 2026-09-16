@@ -311,6 +311,11 @@
       cursor: not-allowed;
     }
 
+    .multiselect-btn:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
     .autocomplete-wrap {
       position: relative;
     }
@@ -1062,26 +1067,33 @@
       <div class="filters-grid">
         <div class="form-group">
           <label>Portfólio</label>
-          <select id="sel-portfolio">
-            <option value="">Todos os portfólios</option>
-            <option value="Portfólio Pequenas Contas">Pequenas Contas</option>
-            <option value="Portfólio Médias Contas">Médias Contas</option>
-            <option value="Portfólio SC/MG">SC/MG</option>
-            <option value="Portfólio SC/SP">SC/SP</option>
-          </select>
+          <div class="multiselect-wrap" id="portfolio-wrap">
+            <button type="button" class="multiselect-btn" id="portfolio-btn" onclick="toggleMultiDropdown('portfolio')">
+              <span id="portfolio-label">Todos os portfólios</span>
+            </button>
+            <div class="multiselect-dropdown" id="portfolio-dropdown">
+              <div class="multiselect-actions">
+                <button onclick="selecionarTodosMulti('portfolio')">Selecionar todos</button>
+                <button onclick="limparMulti('portfolio')">Limpar</button>
+              </div>
+              <div class="multiselect-items" id="portfolio-items"></div>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label>Vertical</label>
-          <select id="sel-vertical">
-            <option value="">Todas as verticais</option>
-            <option value="Arrecadação">Arrecadação</option>
-            <option value="Atendimento">Atendimento</option>
-            <option value="Contratos">Compras/Contratos</option>
-            <option value="Contábil">Contábil</option>
-            <option value="Educação">Educação</option>
-            <option value="Pessoal">Pessoal</option>
-            <option value="Saúde">Saúde</option>
-          </select>
+          <div class="multiselect-wrap" id="vertical-wrap">
+            <button type="button" class="multiselect-btn" id="vertical-btn" onclick="toggleMultiDropdown('vertical')">
+              <span id="vertical-label">Todas as verticais</span>
+            </button>
+            <div class="multiselect-dropdown" id="vertical-dropdown">
+              <div class="multiselect-actions">
+                <button onclick="selecionarTodosMulti('vertical')">Selecionar todos</button>
+                <button onclick="limparMulti('vertical')">Limpar</button>
+              </div>
+              <div class="multiselect-items" id="vertical-items"></div>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -1202,6 +1214,8 @@
     var knownIssues = {};
     var pendingCount = 0;
     var pendingTiposRestore = null;
+    var pendingVerticalRestore = null;
+    var pendingPortfolioRestore = null;
     var pendingAutoSearch = false;
     var pendingSortRestore = false;
     var buscarController = null;
@@ -1337,18 +1351,39 @@
     }
 
     var tiposSelected = new Set();
+    var multiSelected = {
+      vertical: new Set(),
+      portfolio: new Set(),
+    };
     var tiposNomeMap = {};
 
     var TIPOS_PRIORITARIOS = [
-      'Acompanhamento técnico',
-      'Capacitação',
-      'Configuração',
-      'Customização',
-      'Dúvida',
-      'Incidente',
-      'Tratamento de dados',
-      'Treinamento',
+      'Acompanhamento técnico', 'Capacitação', 'Configuração', 'Customização',
+      'Dúvida', 'Incidente', 'Tratamento de dados', 'Treinamento',
     ];
+
+    var VERTICAIS_OPCOES = [
+      'Arrecadação', 'Atendimento', 'Contratos', 'Contábil',
+      'Educação', 'Pessoal', 'Saúde',
+    ];
+
+    var PORTFOLIOS_OPCOES = [
+      { value: 'Portfólio Pequenas Contas', label: 'Pequenas Contas' },
+      { value: 'Portfólio Médias Contas', label: 'Médias Contas' },
+      { value: 'Portfólio SC/MG', label: 'SC/MG' },
+      { value: 'Portfólio SC/SP', label: 'SC/SP' },
+    ];
+
+    function aplicarMultiRestore(namespace, keys) {
+      multiSelected[namespace].clear();
+      document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').forEach(function (cb) { cb.checked = false; });
+      keys.forEach(function (key) {
+        multiSelected[namespace].add(key);
+        var cb = document.querySelector('#' + namespace + '-items input[value="' + key + '"]');
+        if (cb) cb.checked = true;
+      });
+      atualizarMultiLabel(namespace);
+    }
 
     function initTipos(tipos) {
       var container = document.getElementById('tipo-items');
@@ -1509,12 +1544,99 @@
       }
     }
 
-    document.addEventListener('click', function (e) {
-      var wrap = document.getElementById('tipo-wrap');
-      if (wrap && !wrap.contains(e.target)) {
-        document.getElementById('tipo-btn').classList.remove('open');
-        document.getElementById('tipo-dropdown').classList.remove('open');
+    function initMultiSelect(namespace, opcoes) {
+      var container = document.getElementById(namespace + '-items');
+      container.innerHTML = '';
+      multiSelected[namespace].clear();
+
+      opcoes.forEach(function (opcao) {
+        var value = typeof opcao === 'string' ? opcao : opcao.value;
+        var label = typeof opcao === 'string' ? opcao : opcao.label;
+
+        var lbl = document.createElement('label');
+        lbl.className = 'multiselect-item';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = value;
+
+        cb.addEventListener('change', function () {
+          if (cb.checked) multiSelected[namespace].add(value);
+          else multiSelected[namespace].delete(value);
+          atualizarMultiLabel(namespace);
+          buscar();
+        });
+
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(label));
+        container.appendChild(lbl);
+      });
+    }
+
+    function toggleMultiDropdown(namespace) {
+      var btn = document.getElementById(namespace + '-btn');
+      var dd = document.getElementById(namespace + '-dropdown');
+      btn.classList.toggle('open');
+      dd.classList.toggle('open');
+    }
+
+    function selecionarTodosMulti(namespace) {
+      multiSelected[namespace].clear();
+      document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').forEach(function (cb) {
+        cb.checked = true;
+        multiSelected[namespace].add(cb.value);
+      });
+      atualizarMultiLabel(namespace);
+      buscar();
+    }
+
+    function limparMulti(namespace) {
+      multiSelected[namespace].clear();
+      document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').forEach(function (cb) { cb.checked = false; });
+      atualizarMultiLabel(namespace);
+      buscar();
+    }
+
+    function atualizarMultiLabel(namespace) {
+      var label = document.getElementById(namespace + '-label');
+      var btn = document.getElementById(namespace + '-btn');
+      var totalDisponivel = document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').length;
+      var selected = multiSelected[namespace];
+      var todosSelecionados = selected.size >= totalDisponivel && totalDisponivel > 0;
+      var textoTodos = namespace === 'vertical' ? 'Todas as verticais' : 'Todos os portfólios';
+
+      if (selected.size === 0 || todosSelecionados) {
+        label.textContent = textoTodos;
+        var badge = btn.querySelector('.multiselect-badge');
+        if (badge) badge.remove();
+      } else {
+        var arr = [];
+        selected.forEach(function (v) { arr.push(v); });
+        if (selected.size === 1) {
+          var opcaoUnica = namespace === 'portfolio'
+            ? abrevPortfolio(arr[0])
+            : arr[0];
+          label.textContent = opcaoUnica;
+        } else {
+          label.textContent = selected.size + (namespace === 'vertical' ? ' verticais' : ' portfólios');
+        }
+        var badge = btn.querySelector('.multiselect-badge');
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'multiselect-badge';
+          btn.appendChild(badge);
+        }
+        badge.textContent = selected.size;
       }
+    }
+
+    document.addEventListener('click', function (e) {
+      ['tipo', 'vertical', 'portfolio'].forEach(function (namespace) {
+        var wrap = document.getElementById(namespace + '-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+          document.getElementById(namespace + '-btn').classList.remove('open');
+          document.getElementById(namespace + '-dropdown').classList.remove('open');
+        }
+      });
     });
 
     function buscar(silencioso) {
@@ -1523,8 +1645,10 @@
       }
       buscarController = new AbortController();
 
-      var vertical = document.getElementById('sel-vertical').value;
-      var portfolio = document.getElementById('sel-portfolio').value;
+      var verticalArr = [];
+      multiSelected.vertical.forEach(function (v) { verticalArr.push(v); });
+      var portfolioArr = [];
+      multiSelected.portfolio.forEach(function (p) { portfolioArr.push(p); });
       var equipe = document.getElementById('sel-equipe').value;
       var userNames = selectedUsers.map(function (u) { return u.name; });
 
@@ -1540,19 +1664,29 @@
         return;
       }
 
-      var vLower = (vertical || '').toLowerCase();
-      if (vLower === 'saúde' || vLower === 'educação') {
-        portfolio = '';
-        var selPortfolio = document.getElementById('sel-portfolio');
-        if (selPortfolio) {
-          selPortfolio.value = '';
-          selPortfolio.disabled = true;
-          selPortfolio.title = 'Portfólio não aplicável para a vertical ' + vertical;
+      var temSaudeOuEducacao = verticalArr.some(function (v) {
+        var vLower = v.toLowerCase();
+        return vLower === 'saúde' || vLower === 'educação';
+      });
+      var portfolioBtn = document.getElementById('portfolio-btn');
+      if (temSaudeOuEducacao) {
+        if (portfolioArr.length > 0) {
+          portfolioArr = [];
+          multiSelected.portfolio.clear();
+          document.querySelectorAll('#portfolio-items input[type=checkbox]').forEach(function (cb) { cb.checked = false; });
+          atualizarMultiLabel('portfolio');
         }
+        portfolioBtn.disabled = true;
+        portfolioBtn.title = 'Portfólio não aplicável quando Saúde ou Educação está selecionada';
+        document.getElementById('portfolio-dropdown').classList.remove('open');
+        portfolioBtn.classList.remove('open');
+      } else {
+        portfolioBtn.disabled = false;
+        portfolioBtn.title = '';
       }
 
-      var preenchidos = [vertical, portfolio, equipe, userNames.length ? '1' : ''].filter(Boolean).length;
-      var verticalPermiteSozinha = vertical && (vLower === 'saúde' || vLower === 'educação');
+      var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, userNames.length ? '1' : ''].filter(Boolean).length;
+      var verticalPermiteSozinha = temSaudeOuEducacao;
 
       if (preenchidos < 2 && !verticalPermiteSozinha) {
         if (!silencioso) {
@@ -1566,8 +1700,8 @@
       }
 
       var params = new URLSearchParams();
-      if (vertical) params.set('vertical', vertical);
-      if (portfolio) params.set('portfolio', portfolio);
+      if (verticalArr.length) params.set('vertical', verticalArr.join(','));
+      if (portfolioArr.length) params.set('portfolio', portfolioArr.join(','));
       if (equipe) params.set('cf[21500]', equipe);
       if (userNames.length) params.set('users', userNames.join(','));
       if (mostrarParceiros) params.set('mostrarParceiros', 'true');
@@ -1645,20 +1779,6 @@
         });
     }
 
-    document.getElementById('sel-vertical').addEventListener('change', function () {
-      var v = this.value.toLowerCase();
-      var selPortfolio = document.getElementById('sel-portfolio');
-      if (v === 'saúde' || v === 'educação') {
-        selPortfolio.value = '';
-        selPortfolio.disabled = true;
-        selPortfolio.title = 'Portfólio não aplicável para a vertical ' + this.value;
-      } else {
-        selPortfolio.disabled = false;
-        selPortfolio.title = '';
-      }
-      buscar();
-    });
-    document.getElementById('sel-portfolio').addEventListener('change', function () { buscar(); });
     document.getElementById('sel-equipe').addEventListener('change', function () { buscar(); });
     document.getElementById('sel-days').addEventListener('change', function () { if (buscaAtiva) buscar(); });
 
@@ -1952,10 +2072,14 @@
     function salvarFiltros() {
       try {
         var arrTypeKeys = [];
-        tiposSelected.forEach(function (k) { arrTypeKeys.push(k); });
+        var arrVertical = [];
+        multiSelected.vertical.forEach(function (v) { arrVertical.push(v); });
+        var arrPortfolio = [];
+        multiSelected.portfolio.forEach(function (p) { arrPortfolio.push(p); });
+
         localStorage.setItem('filtros_v2', JSON.stringify({
-          portfolio: document.getElementById('sel-portfolio').value,
-          vertical: document.getElementById('sel-vertical').value,
+          portfolio: arrPortfolio,
+          vertical: arrVertical,
           equipe: document.getElementById('sel-equipe').value,
           days: document.getElementById('sel-days').value,
           tipos: arrTypeKeys,
@@ -1972,17 +2096,11 @@
         var saved = localStorage.getItem('filtros_v2');
         if (!saved) return;
         var f = JSON.parse(saved);
-        if (f.vertical) document.getElementById('sel-vertical').value = f.vertical;
-
-        var v = (f.vertical || '').toLowerCase();
-        var selPortfolio = document.getElementById('sel-portfolio');
-        if (v === 'saúde' || v === 'educação') {
-          selPortfolio.value = '';
-          selPortfolio.disabled = true;
-          selPortfolio.title = 'Portfólio não aplicável para a vertical ' + f.vertical;
-          f.portfolio = '';
-        } else {
-          if (f.portfolio) selPortfolio.value = f.portfolio;
+        if (f.vertical && f.vertical.length) {
+          pendingVerticalRestore = f.vertical;
+        }
+        if (f.portfolio && f.portfolio.length) {
+          pendingPortfolioRestore = f.portfolio;
         }
 
         if (f.equipe) document.getElementById('sel-equipe').value = f.equipe;
@@ -2001,16 +2119,34 @@
           pendingSortRestore = true;
         }
 
-        var portfolio = document.getElementById('sel-portfolio').value;
-        var vertical = document.getElementById('sel-vertical').value;
         var equipe = document.getElementById('sel-equipe').value;
-        var verticalPermiteSozinha = vertical && (vertical.toLowerCase() === 'saúde' || vertical.toLowerCase() === 'educação');
+        var verticalTemSaudeOuEducacao = (f.vertical || []).some(function (v) {
+          var vLower = v.toLowerCase();
+          return vLower === 'saúde' || vLower === 'educação';
+        });
 
-        var preenchidos = [portfolio, vertical, equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
-        if (preenchidos >= 2 || verticalPermiteSozinha) pendingAutoSearch = true;
+        var preenchidos = [(f.vertical && f.vertical.length) ? '1' : '', (f.portfolio && f.portfolio.length) ? '1' : '', equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+        if (preenchidos >= 2 || verticalTemSaudeOuEducacao) pendingAutoSearch = true;
       } catch (e) { }
     }
     restaurarFiltros();
+
+    initMultiSelect('vertical', VERTICAIS_OPCOES);
+    if (pendingVerticalRestore) {
+      aplicarMultiRestore('vertical', pendingVerticalRestore);
+      pendingVerticalRestore = null;
+    }
+
+    initMultiSelect('portfolio', PORTFOLIOS_OPCOES);
+    if (pendingPortfolioRestore) {
+      aplicarMultiRestore('portfolio', pendingPortfolioRestore);
+      pendingPortfolioRestore = null;
+    }
+
+    if (pendingAutoSearch) {
+        pendingAutoSearch = false;
+        buscar();
+    }
 
     function atualizarBadgeTitulo(delta) {
       pendingCount = Math.max(0, pendingCount + (delta || 0));
