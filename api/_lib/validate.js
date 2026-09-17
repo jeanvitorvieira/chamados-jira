@@ -40,23 +40,35 @@ function validateDays(daysParam) {
 }
 
 function validateSearchParams(queryParams) {
-  const vertical = queryParams.vertical;
-  const portfolio = queryParams.portfolio;
+  const verticalRaw = queryParams.vertical;
+  const portfolioRaw = queryParams.portfolio;
   const user = queryParams.user;
 
   const equipe = queryParams.equipe || queryParams['cf[21500]'];
 
-  if (vertical !== undefined && vertical !== '') {
-    if (!VERTICAIS_VALIDAS.has(vertical)) {
-      throw new ValidationError(`Vertical inválida: "${vertical}"`);
-    }
-  }
+  const vertical = (verticalRaw || '')
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 
-  if (portfolio !== undefined && portfolio !== '') {
-    if (!PORTFOLIOS_VALIDOS.has(portfolio)) {
-      throw new ValidationError(`Portfólio inválido: "${portfolio}"`);
+  const portfolio = (portfolioRaw || '')
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  vertical.forEach(v => {
+    if (!VERTICAIS_VALIDAS.has(v)) {
+      throw new ValidationError(`Vertical inválida: "${v}"`);
     }
-  }
+  });
+
+  portfolio.forEach(p => {
+    if (!PORTFOLIOS_VALIDOS.has(p)) {
+      throw new ValidationError(`Portfólio inválido: "${p}"`);
+    }
+  });
 
   if (equipe !== undefined && equipe !== '') {
     if (!EQUIPES_VALIDAS.has(equipe)) {
@@ -64,10 +76,13 @@ function validateSearchParams(queryParams) {
     }
   }
 
-  let safePortfolio = portfolio || null;
-  const vLower = (vertical || '').toLowerCase();
-  if (vLower === 'saúde' || vLower === 'educação') {
-    safePortfolio = null;
+  let safePortfolio = portfolio;
+  const temSaudeOuEducacao = vertical.some(v => {
+    const vLower = v.toLowerCase();
+    return vLower === 'saúde' || vLower === 'educação';
+  });
+  if (temSaudeOuEducacao) {
+    safePortfolio = [];
   }
 
   let safeUser = null;
@@ -79,8 +94,8 @@ function validateSearchParams(queryParams) {
   }
 
   return {
-    vertical: vertical || null,
-    portfolio: safePortfolio,
+    vertical: vertical.map(v => escapeJqlValue(v)),
+    portfolio: safePortfolio.map(p => escapeJqlValue(p)),
     user: safeUser,
     equipe: equipe || null,
   };
