@@ -264,7 +264,7 @@
     .form-group input {
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
-      padding: 9px 20px;
+      padding: 9px 10px;
       font-size: 13px;
       color: var(--text-primary);
       background: var(--white);
@@ -661,7 +661,7 @@
       width: 100%;
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
-      padding: 9px 12px;
+      padding: 9px 20px;
       font-size: 13px;
       color: var(--text-primary);
       background: var(--white);
@@ -2057,11 +2057,15 @@
         var saved = localStorage.getItem('filtros_v2');
         if (!saved) return;
         var f = JSON.parse(saved);
-        if (f.vertical && f.vertical.length) {
-          pendingVerticalRestore = f.vertical;
+
+        var verticalArr = Array.isArray(f.vertical) ? f.vertical : (f.vertical ? [f.vertical] : []);
+        var portfolioArr = Array.isArray(f.portfolio) ? f.portfolio : (f.portfolio ? [f.portfolio] : []);
+
+        if (verticalArr.length) {
+          pendingVerticalRestore = verticalArr;
         }
-        if (f.portfolio && f.portfolio.length) {
-          pendingPortfolioRestore = f.portfolio;
+        if (portfolioArr.length) {
+          pendingPortfolioRestore = portfolioArr;
         }
 
         if (f.equipe) document.getElementById('sel-equipe').value = f.equipe;
@@ -2081,15 +2085,16 @@
         }
 
         var equipe = document.getElementById('sel-equipe').value;
-        var verticalTemSaudeOuEducacao = (f.vertical || []).some(function (v) {
+        var verticalTemSaudeOuEducacao = verticalArr.some(function (v) {
           var vLower = v.toLowerCase();
           return vLower === 'saúde' || vLower === 'educação';
         });
 
-        var preenchidos = [(f.vertical && f.vertical.length) ? '1' : '', (f.portfolio && f.portfolio.length) ? '1' : '', equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+        var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
         if (preenchidos >= 2 || verticalTemSaudeOuEducacao) pendingAutoSearch = true;
       } catch (e) { }
     }
+    
     restaurarFiltros();
 
     initMultiSelect('vertical', VERTICAIS_OPCOES);
