@@ -1064,12 +1064,18 @@
 
         <div class="form-group">
           <label>Equipe Responsável</label>
-          <select id="sel-equipe">
-            <option value="">Todas as equipes</option>
-            <option value="Suporte">Suporte</option>
-            <option value="Serviço">Serviço</option>
-            <option value="Produto">Produto</option>
-          </select>
+          <div class="multiselect-wrap" id="equipe-wrap">
+            <button type="button" class="multiselect-btn" id="equipe-btn" onclick="toggleMultiDropdown('equipe')">
+              <span id="equipe-label">Todas as equipes</span>
+            </button>
+            <div class="multiselect-dropdown" id="equipe-dropdown">
+              <div class="multiselect-actions">
+                <button onclick="selecionarTodosMulti('equipe')">Selecionar todos</button>
+                <button onclick="limparMulti('equipe')">Limpar</button>
+              </div>
+              <div class="multiselect-items" id="equipe-items"></div>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -1180,9 +1186,8 @@
     var pendingTiposRestore = null;
     var pendingVerticalRestore = null;
     var pendingPortfolioRestore = null;
+    var pendingEquipeRestore = null;
     var pendingAutoSearch = false;
-    var pendingSortRestore = false;
-    var buscarController = null;
     var pendingSortRestore = false;
     var buscarController = null;
 
@@ -1320,6 +1325,7 @@
     var multiSelected = {
       vertical: new Set(),
       portfolio: new Set(),
+      equipe: new Set(),
     };
     var tiposNomeMap = {};
 
@@ -1338,6 +1344,12 @@
       { value: 'Portfólio Médias Contas', label: 'Médias Contas' },
       { value: 'Portfólio SC/MG', label: 'SC/MG' },
       { value: 'Portfólio SC/SP', label: 'SC/SP' },
+    ];
+
+    var EQUIPES_OPCOES = [
+      'Suporte', 
+      'Serviço', 
+      'Produto'
     ];
 
     function aplicarMultiRestore(namespace, keys) {
@@ -1568,7 +1580,9 @@
       var totalDisponivel = document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').length;
       var selected = multiSelected[namespace];
       var todosSelecionados = selected.size >= totalDisponivel && totalDisponivel > 0;
-      var textoTodos = namespace === 'vertical' ? 'Todas as verticais' : 'Todos os portfólios';
+      var textoTodos = namespace === 'vertical' ? 'Todas as verticais'
+                     : namespace === 'equipe' ? 'Todas as equipes'
+                     : 'Todos os portfólios';
 
       if (selected.size === 0 || todosSelecionados) {
         label.textContent = textoTodos;
@@ -1583,7 +1597,11 @@
             : arr[0];
           label.textContent = opcaoUnica;
         } else {
-          label.textContent = selected.size + (namespace === 'vertical' ? ' verticais' : ' portfólios');
+          label.textContent = selected.size + (
+            namespace === 'vertical' ? ' verticais'
+            : namespace === 'equipe' ? ' equipes'
+            : ' portfólios'
+          );
         }
         var badge = btn.querySelector('.multiselect-badge');
         if (!badge) {
@@ -1596,7 +1614,7 @@
     }
 
     document.addEventListener('click', function (e) {
-      ['tipo', 'vertical', 'portfolio'].forEach(function (namespace) {
+      ['tipo', 'vertical', 'portfolio', 'equipe'].forEach(function (namespace) {
         var wrap = document.getElementById(namespace + '-wrap');
         if (wrap && !wrap.contains(e.target)) {
           document.getElementById(namespace + '-btn').classList.remove('open');
@@ -1615,7 +1633,8 @@
       multiSelected.vertical.forEach(function (v) { verticalArr.push(v); });
       var portfolioArr = [];
       multiSelected.portfolio.forEach(function (p) { portfolioArr.push(p); });
-      var equipe = document.getElementById('sel-equipe').value;
+      var equipeArr = [];
+      multiSelected.equipe.forEach(function (e) { equipeArr.push(e); });
       var userNames = selectedUsers.map(function (u) { return u.name; });
 
       if (inpUser.value.trim()) {
@@ -1651,7 +1670,7 @@
         portfolioBtn.title = '';
       }
 
-      var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, userNames.length ? '1' : ''].filter(Boolean).length;
+      var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipeArr.length ? '1' : '', userNames.length ? '1' : ''].filter(Boolean).length;
       var verticalPermiteSozinha = temSaudeOuEducacao;
 
       if (preenchidos < 2 && !verticalPermiteSozinha) {
@@ -1668,7 +1687,7 @@
       var params = new URLSearchParams();
       if (verticalArr.length) params.set('vertical', verticalArr.join(','));
       if (portfolioArr.length) params.set('portfolio', portfolioArr.join(','));
-      if (equipe) params.set('cf[21500]', equipe);
+      if (equipeArr.length) params.set('cf[21500]', equipeArr.join(','));
       if (userNames.length) params.set('users', userNames.join(','));
       if (mostrarParceiros) params.set('mostrarParceiros', 'true');
 
@@ -1745,7 +1764,6 @@
         });
     }
 
-    document.getElementById('sel-equipe').addEventListener('change', function () { buscar(); });
     document.getElementById('sel-days').addEventListener('change', function () { if (buscaAtiva) buscar(); });
 
     inpUser.addEventListener('keydown', function (e) {
@@ -2040,11 +2058,13 @@
         multiSelected.vertical.forEach(function (v) { arrVertical.push(v); });
         var arrPortfolio = [];
         multiSelected.portfolio.forEach(function (p) { arrPortfolio.push(p); });
+        var arrEquipe = [];
+        multiSelected.equipe.forEach(function (e) { arrEquipe.push(e); });
 
         localStorage.setItem('filtros_v2', JSON.stringify({
           portfolio: arrPortfolio,
           vertical: arrVertical,
-          equipe: document.getElementById('sel-equipe').value,
+          equipe: arrEquipe,
           days: document.getElementById('sel-days').value,
           tipos: arrTypeKeys,
           users: selectedUsers,
@@ -2063,6 +2083,7 @@
 
         var verticalArr = Array.isArray(f.vertical) ? f.vertical : (f.vertical ? [f.vertical] : []);
         var portfolioArr = Array.isArray(f.portfolio) ? f.portfolio : (f.portfolio ? [f.portfolio] : []);
+        var equipeArr = Array.isArray(f.equipe) ? f.equipe : (f.equipe ? [f.equipe] : []);
 
         if (verticalArr.length) {
           pendingVerticalRestore = verticalArr;
@@ -2070,8 +2091,10 @@
         if (portfolioArr.length) {
           pendingPortfolioRestore = portfolioArr;
         }
+        if (equipeArr.length) {
+          pendingEquipeRestore = equipeArr;
+        }
 
-        if (f.equipe) document.getElementById('sel-equipe').value = f.equipe;
         if (f.days) document.getElementById('sel-days').value = f.days;
         if (f.users && f.users.length) {
           f.users.forEach(function (u) { adicionarUserTag(u); });
@@ -2087,13 +2110,12 @@
           pendingSortRestore = true;
         }
 
-        var equipe = document.getElementById('sel-equipe').value;
         var verticalTemSaudeOuEducacao = verticalArr.some(function (v) {
           var vLower = v.toLowerCase();
           return vLower === 'saúde' || vLower === 'educação';
         });
 
-        var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+        var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipeArr.length ? '1' : '', (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
         if (preenchidos >= 2 || verticalTemSaudeOuEducacao) pendingAutoSearch = true;
       } catch (e) { }
     }
@@ -2110,6 +2132,12 @@
     if (pendingPortfolioRestore) {
       aplicarMultiRestore('portfolio', pendingPortfolioRestore);
       pendingPortfolioRestore = null;
+    }
+
+    initMultiSelect('equipe', EQUIPES_OPCOES);
+    if (pendingEquipeRestore) {
+      aplicarMultiRestore('equipe', pendingEquipeRestore);
+      pendingEquipeRestore = null;
     }
 
     function atualizarBadgeTitulo(delta) {
