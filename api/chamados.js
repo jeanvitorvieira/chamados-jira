@@ -134,7 +134,11 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
       ? `cf[10300] = "${vertical[0]}"`
       : `cf[10300] in (${vertical.map(v => `"${v}"`).join(', ')})`);
   }
-  if (equipe) clauses.push(`cf[21500] = "${equipe}"`);
+  if (equipe && equipe.length > 0) {
+    clauses.push(equipe.length === 1
+      ? `cf[21500] = "${equipe[0]}"`
+      : `cf[21500] in (${equipe.map(e => `"${e}"`).join(', ')})`);
+  }
   if (days > 0) clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {

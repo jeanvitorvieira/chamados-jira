@@ -42,9 +42,8 @@ function validateDays(daysParam) {
 function validateSearchParams(queryParams) {
   const verticalRaw = queryParams.vertical;
   const portfolioRaw = queryParams.portfolio;
+  const equipeRaw = queryParams.equipe || queryParams['cf[21500]'];
   const user = queryParams.user;
-
-  const equipe = queryParams.equipe || queryParams['cf[21500]'];
 
   const vertical = (verticalRaw || '')
     .split(',')
@@ -58,6 +57,12 @@ function validateSearchParams(queryParams) {
     .filter(Boolean)
     .slice(0, 20);
 
+  const equipe = (equipeRaw || '')
+    .split(',')
+    .map(e => e.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
   vertical.forEach(v => {
     if (!VERTICAIS_VALIDAS.has(v)) {
       throw new ValidationError(`Vertical inválida: "${v}"`);
@@ -70,11 +75,11 @@ function validateSearchParams(queryParams) {
     }
   });
 
-  if (equipe !== undefined && equipe !== '') {
-    if (!EQUIPES_VALIDAS.has(equipe)) {
-      throw new ValidationError(`Equipe inválida: "${equipe}"`);
+  equipe.forEach(e => {
+    if (!EQUIPES_VALIDAS.has(e)) {
+      throw new ValidationError(`Equipe inválida: "${e}"`);
     }
-  }
+  });
 
   let safePortfolio = portfolio;
   const temSaudeOuEducacao = vertical.some(v => {
@@ -97,7 +102,7 @@ function validateSearchParams(queryParams) {
     vertical: vertical.map(v => escapeJqlValue(v)),
     portfolio: safePortfolio.map(p => escapeJqlValue(p)),
     user: safeUser,
-    equipe: equipe || null,
+    equipe: equipe.map(e => escapeJqlValue(e)),
   };
 }
 
