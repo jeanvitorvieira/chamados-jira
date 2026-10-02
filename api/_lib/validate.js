@@ -18,6 +18,13 @@ const EQUIPES_VALIDAS = new Set([
   'Produto',
 ]);
 
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
 function escapeJqlValue(value) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
@@ -101,8 +108,8 @@ function validateSearchParams(queryParams) {
   return {
     vertical: vertical.map(v => escapeJqlValue(v)),
     portfolio: safePortfolio.map(p => escapeJqlValue(p)),
-    user: safeUser,
     equipe: equipe.map(e => escapeJqlValue(e)),
+    user: safeUser,
   };
 }
 
@@ -124,13 +131,6 @@ function validateUsers(usersParam) {
     .slice(0, 10)
     .filter(u => u.length <= 200)
     .map(u => escapeJqlValue(u));
-}
-
-class ValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ValidationError';
-  }
 }
 
 module.exports = {

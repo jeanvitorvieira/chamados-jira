@@ -246,9 +246,9 @@
 
     .form-group-checkbox {
       display: flex;
-      flex-direction:row;
-      justify-content:center;
-      align-items:center;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
       gap: 8px;
     }
 
@@ -523,6 +523,17 @@
       font-weight: 600;
     }
 
+    .info-banner {
+      background: var(--gray-bg);
+      border: 1.5px solid var(--gray-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
     .pri-badge {
       display: inline-block;
       padding: 2px 8px;
@@ -646,7 +657,7 @@
 
     .filters-grid-3 {
       display: grid;
-      grid-template-columns: 1fr 1fr 0.5fr;
+      grid-template-columns: 1fr 1fr 1fr 0.5fr;
       gap: 12px;
       margin-top: 12px;
       padding-top: 12px;
@@ -760,20 +771,20 @@
     }
 
     .checkbox-container {
-      text-transform:none;
+      text-transform: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       font-size: 12px;
       cursor: pointer;
-      font-weight:600;
-      color:var(--text-primary);
-      cursor:pointer
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer
     }
 
     @media (max-width: 1226px) {
-      .checkbox-container span{
-      width: 55%;
+      .checkbox-container span {
+        width: 55%;
       }
     }
 
@@ -805,14 +816,14 @@
       padding: 8px 12px;
       font-size: 12px;
       font-weight: normal;
-      
+
       position: absolute;
-      bottom: 125%; 
+      bottom: 125%;
       right: 0;
       left: auto;
       transform: none;
       z-index: 10;
-      
+
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
@@ -971,8 +982,6 @@
         transform: translateY(0);
       }
     }
-
-
   </style>
 </head>
 
@@ -1129,6 +1138,14 @@
               <div class="multiselect-items" id="tipo-items"></div>
             </div>
           </div>
+        </div>
+        <div class="form-group">
+          <label title="Chamados classificados como Prestação de Contas, com base no campo Funcionalidades">Prestação de Contas</label>
+          <select id="sel-prestacao-contas">
+            <option value="incluir" selected>Incluir</option>
+            <option value="excluir">Não incluir</option>
+            <option value="apenas">Apenas</option>
+          </select>
         </div>
         <div class="form-group-checkbox">
           <input type="checkbox" id="chk-parceiros" style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
@@ -1346,11 +1363,7 @@
       { value: 'Portfólio SC/SP', label: 'SC/SP' },
     ];
 
-    var EQUIPES_OPCOES = [
-      'Suporte', 
-      'Serviço', 
-      'Produto'
-    ];
+    var EQUIPES_OPCOES = ['Suporte', 'Serviço', 'Produto'];
 
     function aplicarMultiRestore(namespace, keys) {
       multiSelected[namespace].clear();
@@ -1691,6 +1704,11 @@
       if (userNames.length) params.set('users', userNames.join(','));
       if (mostrarParceiros) params.set('mostrarParceiros', 'true');
 
+      var prestacaoContas = document.getElementById('sel-prestacao-contas').value;
+      if (prestacaoContas && prestacaoContas !== 'incluir') {
+        params.set('prestacaoContas', prestacaoContas);
+      }
+
       var arrTypeKeys = [];
       tiposSelected.forEach(function (k) { arrTypeKeys.push(k); });
       var totalTiposDisponiveis = document.querySelectorAll('#tipo-items input[type=checkbox]').length;
@@ -1765,6 +1783,7 @@
     }
 
     document.getElementById('sel-days').addEventListener('change', function () { if (buscaAtiva) buscar(); });
+    document.getElementById('sel-prestacao-contas').addEventListener('change', function () { buscar(); });
 
     inpUser.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
@@ -1900,21 +1919,27 @@
         ? selectedUsers.map(function (u) { return u.displayName; }).join(', ')
         : null;
 
-      document.getElementById('chip-total').textContent = data.total || (unassigned.length + assigned.length);
-      document.getElementById('chip-unassigned').textContent = data.totalUnassigned != null ? data.totalUnassigned : unassigned.length;
-      document.getElementById('chip-mine').textContent = data.totalAssigned != null ? data.totalAssigned : assigned.length;
+      document.getElementById('chip-total').textContent = unassigned.length + assigned.length;
+      document.getElementById('chip-unassigned').textContent = unassigned.length;
+      document.getElementById('chip-mine').textContent = assigned.length;
       document.getElementById('chips').style.display = 'flex';
 
       var avisos = [];
-      if (data.totalUnassigned > unassigned.length)
-        avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
-      if (data.totalAssigned > assigned.length)
-        avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+      if (!data.prestacaoContasAtivo) {
+        if (data.totalUnassigned > unassigned.length)
+          avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
+        if (data.totalAssigned > assigned.length)
+          avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+      }
       var incompleto = avisos.length
         ? '<div class="incomplete-banner">⚠️ Resultados incompletos — ' + avisos.join(' · ') + '. Refine os filtros ou reduza o período.</div>'
         : '';
 
-      document.getElementById('results').innerHTML = incompleto +
+      var filtroInfo = data.prestacaoContasAtivo
+        ? '<div class="info-banner">ℹ️ Filtro de Prestação de Contas ativo — as contagens refletem apenas os chamados filtrados.</div>'
+        : '';
+
+      document.getElementById('results').innerHTML = incompleto + filtroInfo +
         '<div class="section">' +
         '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
         renderTable(unassigned, 'tbl-unassigned', true) +
@@ -2069,6 +2094,7 @@
           tipos: arrTypeKeys,
           users: selectedUsers,
           mostrarParceiros: mostrarParceiros,
+          prestacaoContas: document.getElementById('sel-prestacao-contas').value,
           sortCol: sortState.col,
           sortDir: sortState.dir,
         }));
@@ -2096,6 +2122,7 @@
         }
 
         if (f.days) document.getElementById('sel-days').value = f.days;
+        if (f.prestacaoContas) document.getElementById('sel-prestacao-contas').value = f.prestacaoContas;
         if (f.users && f.users.length) {
           f.users.forEach(function (u) { adicionarUserTag(u); });
         }
@@ -2119,7 +2146,7 @@
         if (preenchidos >= 2 || verticalTemSaudeOuEducacao) pendingAutoSearch = true;
       } catch (e) { }
     }
-    
+
     restaurarFiltros();
 
     initMultiSelect('vertical', VERTICAIS_OPCOES);
@@ -2175,7 +2202,7 @@
 
     function tempoFilaBadge(iso) {
       if (!iso) return '';
-      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);      
+      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);
       var cls = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
       return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
     }
