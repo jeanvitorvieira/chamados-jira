@@ -246,9 +246,9 @@
 
     .form-group-checkbox {
       display: flex;
-      flex-direction:row;
-      justify-content:center;
-      align-items:center;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
       gap: 8px;
     }
 
@@ -523,6 +523,17 @@
       font-weight: 600;
     }
 
+    .info-banner {
+      background: var(--gray-bg);
+      border: 1.5px solid var(--gray-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
     .pri-badge {
       display: inline-block;
       padding: 2px 8px;
@@ -646,7 +657,7 @@
 
     .filters-grid-3 {
       display: grid;
-      grid-template-columns: 1fr 1fr 0.5fr;
+      grid-template-columns: 1fr 1fr 1fr 0.5fr;
       gap: 12px;
       margin-top: 12px;
       padding-top: 12px;
@@ -760,20 +771,20 @@
     }
 
     .checkbox-container {
-      text-transform:none;
+      text-transform: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       font-size: 12px;
       cursor: pointer;
-      font-weight:600;
-      color:var(--text-primary);
-      cursor:pointer
+      font-weight: 600;
+      color: var(--text-primary);
+      cursor: pointer
     }
 
     @media (max-width: 1226px) {
-      .checkbox-container span{
-      width: 55%;
+      .checkbox-container span {
+        width: 55%;
       }
     }
 
@@ -805,14 +816,14 @@
       padding: 8px 12px;
       font-size: 12px;
       font-weight: normal;
-      
+
       position: absolute;
-      bottom: 125%; 
+      bottom: 125%;
       right: 0;
       left: auto;
       transform: none;
       z-index: 10;
-      
+
       transition: opacity 0.3s ease, visibility 0.3s ease;
     }
 
@@ -971,8 +982,6 @@
         transform: translateY(0);
       }
     }
-
-
   </style>
 </head>
 
@@ -1064,12 +1073,18 @@
 
         <div class="form-group">
           <label>Equipe Responsável</label>
-          <select id="sel-equipe">
-            <option value="">Todas as equipes</option>
-            <option value="Suporte">Suporte</option>
-            <option value="Serviço">Serviço</option>
-            <option value="Produto">Produto</option>
-          </select>
+          <div class="multiselect-wrap" id="equipe-wrap">
+            <button type="button" class="multiselect-btn" id="equipe-btn" onclick="toggleMultiDropdown('equipe')">
+              <span id="equipe-label">Todas as equipes</span>
+            </button>
+            <div class="multiselect-dropdown" id="equipe-dropdown">
+              <div class="multiselect-actions">
+                <button onclick="selecionarTodosMulti('equipe')">Selecionar todos</button>
+                <button onclick="limparMulti('equipe')">Limpar</button>
+              </div>
+              <div class="multiselect-items" id="equipe-items"></div>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -1123,6 +1138,14 @@
               <div class="multiselect-items" id="tipo-items"></div>
             </div>
           </div>
+        </div>
+        <div class="form-group">
+          <label title="Chamados classificados como Prestação de Contas, com base no campo Funcionalidades">Prestação de Contas</label>
+          <select id="sel-prestacao-contas">
+            <option value="incluir" selected>Incluir</option>
+            <option value="excluir">Não incluir</option>
+            <option value="apenas">Apenas</option>
+          </select>
         </div>
         <div class="form-group-checkbox">
           <input type="checkbox" id="chk-parceiros" style="width:16px;height:16px;accent-color:var(--blue-primary);cursor:pointer">
@@ -1180,9 +1203,8 @@
     var pendingTiposRestore = null;
     var pendingVerticalRestore = null;
     var pendingPortfolioRestore = null;
+    var pendingEquipeRestore = null;
     var pendingAutoSearch = false;
-    var pendingSortRestore = false;
-    var buscarController = null;
     var pendingSortRestore = false;
     var buscarController = null;
 
@@ -1320,6 +1342,7 @@
     var multiSelected = {
       vertical: new Set(),
       portfolio: new Set(),
+      equipe: new Set(),
     };
     var tiposNomeMap = {};
 
@@ -1339,6 +1362,8 @@
       { value: 'Portfólio SC/MG', label: 'SC/MG' },
       { value: 'Portfólio SC/SP', label: 'SC/SP' },
     ];
+
+    var EQUIPES_OPCOES = ['Suporte', 'Serviço', 'Produto'];
 
     function aplicarMultiRestore(namespace, keys) {
       multiSelected[namespace].clear();
@@ -1568,7 +1593,9 @@
       var totalDisponivel = document.querySelectorAll('#' + namespace + '-items input[type=checkbox]').length;
       var selected = multiSelected[namespace];
       var todosSelecionados = selected.size >= totalDisponivel && totalDisponivel > 0;
-      var textoTodos = namespace === 'vertical' ? 'Todas as verticais' : 'Todos os portfólios';
+      var textoTodos = namespace === 'vertical' ? 'Todas as verticais'
+                     : namespace === 'equipe' ? 'Todas as equipes'
+                     : 'Todos os portfólios';
 
       if (selected.size === 0 || todosSelecionados) {
         label.textContent = textoTodos;
@@ -1583,7 +1610,11 @@
             : arr[0];
           label.textContent = opcaoUnica;
         } else {
-          label.textContent = selected.size + (namespace === 'vertical' ? ' verticais' : ' portfólios');
+          label.textContent = selected.size + (
+            namespace === 'vertical' ? ' verticais'
+            : namespace === 'equipe' ? ' equipes'
+            : ' portfólios'
+          );
         }
         var badge = btn.querySelector('.multiselect-badge');
         if (!badge) {
@@ -1596,7 +1627,7 @@
     }
 
     document.addEventListener('click', function (e) {
-      ['tipo', 'vertical', 'portfolio'].forEach(function (namespace) {
+      ['tipo', 'vertical', 'portfolio', 'equipe'].forEach(function (namespace) {
         var wrap = document.getElementById(namespace + '-wrap');
         if (wrap && !wrap.contains(e.target)) {
           document.getElementById(namespace + '-btn').classList.remove('open');
@@ -1615,7 +1646,8 @@
       multiSelected.vertical.forEach(function (v) { verticalArr.push(v); });
       var portfolioArr = [];
       multiSelected.portfolio.forEach(function (p) { portfolioArr.push(p); });
-      var equipe = document.getElementById('sel-equipe').value;
+      var equipeArr = [];
+      multiSelected.equipe.forEach(function (e) { equipeArr.push(e); });
       var userNames = selectedUsers.map(function (u) { return u.name; });
 
       if (inpUser.value.trim()) {
@@ -1651,7 +1683,7 @@
         portfolioBtn.title = '';
       }
 
-      var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, userNames.length ? '1' : ''].filter(Boolean).length;
+      var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipeArr.length ? '1' : '', userNames.length ? '1' : ''].filter(Boolean).length;
       var verticalPermiteSozinha = temSaudeOuEducacao;
 
       if (preenchidos < 2 && !verticalPermiteSozinha) {
@@ -1668,9 +1700,14 @@
       var params = new URLSearchParams();
       if (verticalArr.length) params.set('vertical', verticalArr.join(','));
       if (portfolioArr.length) params.set('portfolio', portfolioArr.join(','));
-      if (equipe) params.set('cf[21500]', equipe);
+      if (equipeArr.length) params.set('cf[21500]', equipeArr.join(','));
       if (userNames.length) params.set('users', userNames.join(','));
       if (mostrarParceiros) params.set('mostrarParceiros', 'true');
+
+      var prestacaoContas = document.getElementById('sel-prestacao-contas').value;
+      if (prestacaoContas && prestacaoContas !== 'incluir') {
+        params.set('prestacaoContas', prestacaoContas);
+      }
 
       var arrTypeKeys = [];
       tiposSelected.forEach(function (k) { arrTypeKeys.push(k); });
@@ -1745,8 +1782,8 @@
         });
     }
 
-    document.getElementById('sel-equipe').addEventListener('change', function () { buscar(); });
     document.getElementById('sel-days').addEventListener('change', function () { if (buscaAtiva) buscar(); });
+    document.getElementById('sel-prestacao-contas').addEventListener('change', function () { buscar(); });
 
     inpUser.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
@@ -1882,21 +1919,27 @@
         ? selectedUsers.map(function (u) { return u.displayName; }).join(', ')
         : null;
 
-      document.getElementById('chip-total').textContent = data.total || (unassigned.length + assigned.length);
-      document.getElementById('chip-unassigned').textContent = data.totalUnassigned != null ? data.totalUnassigned : unassigned.length;
-      document.getElementById('chip-mine').textContent = data.totalAssigned != null ? data.totalAssigned : assigned.length;
+      document.getElementById('chip-total').textContent = unassigned.length + assigned.length;
+      document.getElementById('chip-unassigned').textContent = unassigned.length;
+      document.getElementById('chip-mine').textContent = assigned.length;
       document.getElementById('chips').style.display = 'flex';
 
       var avisos = [];
-      if (data.totalUnassigned > unassigned.length)
-        avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
-      if (data.totalAssigned > assigned.length)
-        avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+      if (!data.prestacaoContasAtivo) {
+        if (data.totalUnassigned > unassigned.length)
+          avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
+        if (data.totalAssigned > assigned.length)
+          avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
+      }
       var incompleto = avisos.length
         ? '<div class="incomplete-banner">⚠️ Resultados incompletos — ' + avisos.join(' · ') + '. Refine os filtros ou reduza o período.</div>'
         : '';
 
-      document.getElementById('results').innerHTML = incompleto +
+      var filtroInfo = data.prestacaoContasAtivo
+        ? '<div class="info-banner">ℹ️ Filtro de Prestação de Contas ativo — as contagens refletem apenas os chamados filtrados.</div>'
+        : '';
+
+      document.getElementById('results').innerHTML = incompleto + filtroInfo +
         '<div class="section">' +
         '<div class="section-header"><h3>⚠️ Sem responsável</h3><span class="tag tag-warning">' + unassigned.length + ' chamado' + (unassigned.length !== 1 ? 's' : '') + '</span></div>' +
         renderTable(unassigned, 'tbl-unassigned', true) +
@@ -2040,15 +2083,18 @@
         multiSelected.vertical.forEach(function (v) { arrVertical.push(v); });
         var arrPortfolio = [];
         multiSelected.portfolio.forEach(function (p) { arrPortfolio.push(p); });
+        var arrEquipe = [];
+        multiSelected.equipe.forEach(function (e) { arrEquipe.push(e); });
 
         localStorage.setItem('filtros_v2', JSON.stringify({
           portfolio: arrPortfolio,
           vertical: arrVertical,
-          equipe: document.getElementById('sel-equipe').value,
+          equipe: arrEquipe,
           days: document.getElementById('sel-days').value,
           tipos: arrTypeKeys,
           users: selectedUsers,
           mostrarParceiros: mostrarParceiros,
+          prestacaoContas: document.getElementById('sel-prestacao-contas').value,
           sortCol: sortState.col,
           sortDir: sortState.dir,
         }));
@@ -2063,6 +2109,7 @@
 
         var verticalArr = Array.isArray(f.vertical) ? f.vertical : (f.vertical ? [f.vertical] : []);
         var portfolioArr = Array.isArray(f.portfolio) ? f.portfolio : (f.portfolio ? [f.portfolio] : []);
+        var equipeArr = Array.isArray(f.equipe) ? f.equipe : (f.equipe ? [f.equipe] : []);
 
         if (verticalArr.length) {
           pendingVerticalRestore = verticalArr;
@@ -2070,9 +2117,12 @@
         if (portfolioArr.length) {
           pendingPortfolioRestore = portfolioArr;
         }
+        if (equipeArr.length) {
+          pendingEquipeRestore = equipeArr;
+        }
 
-        if (f.equipe) document.getElementById('sel-equipe').value = f.equipe;
         if (f.days) document.getElementById('sel-days').value = f.days;
+        if (f.prestacaoContas) document.getElementById('sel-prestacao-contas').value = f.prestacaoContas;
         if (f.users && f.users.length) {
           f.users.forEach(function (u) { adicionarUserTag(u); });
         }
@@ -2087,17 +2137,16 @@
           pendingSortRestore = true;
         }
 
-        var equipe = document.getElementById('sel-equipe').value;
         var verticalTemSaudeOuEducacao = verticalArr.some(function (v) {
           var vLower = v.toLowerCase();
           return vLower === 'saúde' || vLower === 'educação';
         });
 
-        var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipe, (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
+        var preenchidos = [verticalArr.length ? '1' : '', portfolioArr.length ? '1' : '', equipeArr.length ? '1' : '', (f.users && f.users.length) ? '1' : ''].filter(Boolean).length;
         if (preenchidos >= 2 || verticalTemSaudeOuEducacao) pendingAutoSearch = true;
       } catch (e) { }
     }
-    
+
     restaurarFiltros();
 
     initMultiSelect('vertical', VERTICAIS_OPCOES);
@@ -2112,9 +2161,10 @@
       pendingPortfolioRestore = null;
     }
 
-    if (pendingAutoSearch) {
-        pendingAutoSearch = false;
-        buscar();
+    initMultiSelect('equipe', EQUIPES_OPCOES);
+    if (pendingEquipeRestore) {
+      aplicarMultiRestore('equipe', pendingEquipeRestore);
+      pendingEquipeRestore = null;
     }
 
     function atualizarBadgeTitulo(delta) {
@@ -2152,7 +2202,7 @@
 
     function tempoFilaBadge(iso) {
       if (!iso) return '';
-      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);      
+      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);
       var cls = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
       return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
     }

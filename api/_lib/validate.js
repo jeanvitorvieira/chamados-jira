@@ -18,6 +18,13 @@ const EQUIPES_VALIDAS = new Set([
   'Produto',
 ]);
 
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
 function escapeJqlValue(value) {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
@@ -42,9 +49,8 @@ function validateDays(daysParam) {
 function validateSearchParams(queryParams) {
   const verticalRaw = queryParams.vertical;
   const portfolioRaw = queryParams.portfolio;
+  const equipeRaw = queryParams.equipe || queryParams['cf[21500]'];
   const user = queryParams.user;
-
-  const equipe = queryParams.equipe || queryParams['cf[21500]'];
 
   const vertical = (verticalRaw || '')
     .split(',')
@@ -58,6 +64,12 @@ function validateSearchParams(queryParams) {
     .filter(Boolean)
     .slice(0, 20);
 
+  const equipe = (equipeRaw || '')
+    .split(',')
+    .map(e => e.trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
   vertical.forEach(v => {
     if (!VERTICAIS_VALIDAS.has(v)) {
       throw new ValidationError(`Vertical inválida: "${v}"`);
@@ -70,11 +82,11 @@ function validateSearchParams(queryParams) {
     }
   });
 
-  if (equipe !== undefined && equipe !== '') {
-    if (!EQUIPES_VALIDAS.has(equipe)) {
-      throw new ValidationError(`Equipe inválida: "${equipe}"`);
+  equipe.forEach(e => {
+    if (!EQUIPES_VALIDAS.has(e)) {
+      throw new ValidationError(`Equipe inválida: "${e}"`);
     }
-  }
+  });
 
   let safePortfolio = portfolio;
   const temSaudeOuEducacao = vertical.some(v => {
@@ -96,8 +108,8 @@ function validateSearchParams(queryParams) {
   return {
     vertical: vertical.map(v => escapeJqlValue(v)),
     portfolio: safePortfolio.map(p => escapeJqlValue(p)),
+    equipe: equipe.map(e => escapeJqlValue(e)),
     user: safeUser,
-    equipe: equipe || null,
   };
 }
 
@@ -119,13 +131,6 @@ function validateUsers(usersParam) {
     .slice(0, 10)
     .filter(u => u.length <= 200)
     .map(u => escapeJqlValue(u));
-}
-
-class ValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ValidationError';
-  }
 }
 
 module.exports = {

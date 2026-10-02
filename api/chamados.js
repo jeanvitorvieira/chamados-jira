@@ -13,6 +13,7 @@ const FIELDS = [
   'customfield_10300',
   'customfield_10132',
   'customfield_21500',
+  'customfield_10335',
   'security'
 ];
 
@@ -26,6 +27,30 @@ const NOMES_TIPOS_EXCLUIDOS = [
   'Fora de escopo (NÃO USAR - Use Dúvida)',
   'Treinamento de Implantação old',
 ];
+
+const FUNCIONALIDADES_PRESTACAO_CONTAS = [
+  'Geração arquivos TCE-SC (e-Sfinge)',
+  'Integração e-Sfinge',
+  'Prestação de Contas e-Sfinge',
+  'SIOPE',
+  'SIOPS',
+  'Arquivo da Matriz de Saldos Contábeis - MSC (SICONFI)',
+  'Arquivo da Declaração de Contas Anuais - DCA (SICONFI)',
+  'eSocial - EFD-Reinf',
+  'Envio SisObra',
+  'Relação de Comprovantes do EFD-Reinf',
+].map(f => f.toLowerCase());
+
+function isPrestacaoContas(funcionalidadesTexto) {
+  const texto = String(funcionalidadesTexto || '').toLowerCase();
+  return FUNCIONALIDADES_PRESTACAO_CONTAS.some(rotulo => texto.includes(rotulo));
+}
+
+function filtrarPrestacaoContas(issues, modo) {
+  if (modo === 'excluir') return issues.filter(i => !i.isPrestacaoContas);
+  if (modo === 'apenas')  return issues.filter(i => i.isPrestacaoContas);
+  return issues;
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -50,10 +75,13 @@ module.exports = async function handler(req, res) {
 
   const selectedTypeIds = rawTypes.filter(s => /^\d+$/.test(s));
   const selectedTypes   = rawTypes.filter(s => !/^\d+$/.test(s)).map(t => validateTypes(t)[0]).filter(Boolean);
-  
-  const days            = validateDays(req.query.days);
-  const users           = validateUsers(req.query.users || req.query.user || '');
+
+  const days              = validateDays(req.query.days);
+  const users             = validateUsers(req.query.users || req.query.user || '');
   const mostrarParceiros  = req.query.mostrarParceiros === 'true';
+  const prestacaoContas   = ['incluir', 'excluir', 'apenas'].includes(req.query.prestacaoContas)
+    ? req.query.prestacaoContas
+    : 'incluir';
 
   const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
   const jqlAssigned   = users.length > 0
@@ -68,23 +96,27 @@ module.exports = async function handler(req, res) {
 
     const filtrarParceiro = i => mostrarParceiros || !i.isParceiro;
 
-    const unassigned = (dataUnassigned.issues ?? [])
+    const unassignedBase = (dataUnassigned.issues ?? [])
       .map(mapIssue)
       .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
       .filter(filtrarParceiro);
 
-    const assigned = (dataAssigned.issues ?? [])
+    const assignedBase = (dataAssigned.issues ?? [])
       .map(mapIssue)
       .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
       .filter(filtrarParceiro);
+
+    const unassigned = filtrarPrestacaoContas(unassignedBase, prestacaoContas);
+    const assigned   = filtrarPrestacaoContas(assignedBase, prestacaoContas);
 
     return res.status(200).json({
       ok:              true,
-      totalUnassigned: unassigned.length,
-      totalAssigned:   assigned.length,
-      total:           unassigned.length + assigned.length,
+      totalUnassigned: unassignedBase.length,
+      totalAssigned:   assignedBase.length,
+      total:           unassignedBase.length + assignedBase.length,
       unassigned,
       assigned,
+      prestacaoContasAtivo: prestacaoContas !== 'incluir',
     });
   } catch (err) {
     if (err instanceof ConfigError) {
@@ -134,7 +166,11 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
       ? `cf[10300] = "${vertical[0]}"`
       : `cf[10300] in (${vertical.map(v => `"${v}"`).join(', ')})`);
   }
-  if (equipe) clauses.push(`cf[21500] = "${equipe}"`);
+  if (equipe && equipe.length > 0) {
+    clauses.push(equipe.length === 1
+      ? `cf[21500] = "${equipe[0]}"`
+      : `cf[21500] in (${equipe.map(e => `"${e}"`).join(', ')})`);
+  }
   if (days > 0) clauses.push(`updated >= -${days}d`);
 
   if (mode === 'assigned' && users.length > 0) {
@@ -151,7 +187,7 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
 function mapIssue(raw) {
   const f = raw.fields;
   const nivelSeguranca = f.security?.name ?? '';
-  
+
   return {
     key:       raw.key,
     summary:   f.summary,
@@ -164,8 +200,9 @@ function mapIssue(raw) {
     created:   f.created,
     sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
-    equipe:    f.customfield_21500?.value ?? null, 
+    equipe:    f.customfield_21500?.value ?? null,
     isParceiro: nivelSeguranca.toLowerCase().includes('parceiro'),
+    isPrestacaoContas: isPrestacaoContas(f.customfield_10335),
     url:       `${process.env.JIRA_URL}/browse/${raw.key}`,
   };
 }
