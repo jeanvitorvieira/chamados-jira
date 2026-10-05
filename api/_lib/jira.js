@@ -67,6 +67,31 @@ async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
   };
 }
 
+async function searchAllIssues(jql, fields, maxIssues = 300) {
+  const PAGE_SIZE = 100;
+
+  const first = await searchIssues(jql, fields, 0, PAGE_SIZE);
+  const total = first.total;
+
+  const step  = first.maxResults || PAGE_SIZE;
+  const limit = Math.min(total, maxIssues);
+
+  const offsets = [];
+  for (let start = step; start < limit; start += step) offsets.push(start);
+
+  const rest = await Promise.all(
+    offsets.map(start => searchIssues(jql, fields, start, step))
+  );
+
+  const byKey = new Map();
+  for (const page of [first, ...rest]) {
+    for (const issue of page.issues) byKey.set(issue.key, issue);
+  }
+
+  const issues = Array.from(byKey.values()).slice(0, maxIssues);
+  return { issues, total, loaded: issues.length, truncated: issues.length < total };
+}
+
 async function searchUsers(query, maxResults = 50) {
   const safeMax = Number.isFinite(maxResults) ? maxResults : 50;
 
@@ -104,4 +129,4 @@ class ConfigError extends Error {
   }
 }
 
-module.exports = { searchIssues, searchUsers, get, JiraError, ConfigError };
+module.exports = { searchIssues, searchAllIssues, searchUsers, get, JiraError, ConfigError };

@@ -1675,6 +1675,7 @@
       if (inpUser.value.trim()) {
         if (!silencioso) {
           inpUser.classList.add('inp-warn');
+          _lastSignature = null;
           document.getElementById('results').innerHTML =
             '<div class="state"><div class="state-icon">⚠️</div>' +
             'Selecione um responsável <strong>da lista</strong> — o texto digitado não é um filtro válido.' +
@@ -1710,6 +1711,7 @@
 
       if (preenchidos < 2 && !verticalPermiteSozinha) {
         if (!silencioso) {
+          _lastSignature = null;
           document.getElementById('results').innerHTML =
             '<div class="state"><div class="state-icon">⚠️</div>' +
             'Selecione pelo menos <strong>2 filtros</strong> antes de buscar.<br>' +
@@ -1744,6 +1746,8 @@
       if (days && days !== '0') params.set('days', days);
 
       if (!silencioso) {
+        params.set('fresh', '1');
+        _lastSignature = null;
         knownIssues = {};
         if (pendingSortRestore) {
           pendingSortRestore = false;
@@ -1766,7 +1770,7 @@
         .then(function (data) {
           if (!data.ok) throw new Error(data.error || 'Erro desconhecido');
 
-          renderResults(data, userNames);
+          renderResults(data, userNames, { skipIfUnchanged: silencioso });
 
           if (silencioso) {
             limparBanners();
@@ -1931,9 +1935,30 @@
       if (_lastData) renderResults(_lastData, _lastUser);
     }
 
-    function renderResults(data, userKey) {
+    var _lastSignature = null;
+
+    function assinaturaDados(data) {
+      var partes = [];
+      ['unassigned', 'assigned'].forEach(function (lista) {
+        var itens = data[lista] || [];
+        partes.push(lista + ':' + itens.length);
+        itens.forEach(function (i) {
+          partes.push([i.key, i.summary, i.portfolio, i.sistema, i.equipe,
+            i.assignee, i.status, i.priority, i.type, i.updated].join('\u0001'));
+        });
+      });
+      partes.push([data.prestacaoContasAtivo, data.truncatedUnassigned, data.truncatedAssigned,
+        data.jiraTotalUnassigned, data.jiraTotalAssigned].join('|'));
+      return partes.join('\u0002');
+    }
+
+    function renderResults(data, userKey, opts) {
       _lastData = data;
       _lastUser = userKey;
+
+      var assinatura = assinaturaDados(data);
+      if (opts && opts.skipIfUnchanged && assinatura === _lastSignature) return false;
+      _lastSignature = assinatura;
 
       var unassigned = data.unassigned || [];
       var assigned = data.assigned || [];
@@ -1947,12 +1972,10 @@
       document.getElementById('chips').style.display = 'flex';
 
       var avisos = [];
-      if (!data.prestacaoContasAtivo) {
-        if (data.totalUnassigned > unassigned.length)
-          avisos.push('sem responsável: exibindo ' + unassigned.length + ' de ' + data.totalUnassigned);
-        if (data.totalAssigned > assigned.length)
-          avisos.push('atribuídos: exibindo ' + assigned.length + ' de ' + data.totalAssigned);
-      }
+      if (data.truncatedUnassigned)
+        avisos.push('sem responsável: carregados ' + data.loadedUnassigned + ' de ' + data.jiraTotalUnassigned);
+      if (data.truncatedAssigned)
+        avisos.push('atribuídos: carregados ' + data.loadedAssigned + ' de ' + data.jiraTotalAssigned);
       var incompleto = avisos.length
         ? '<div class="incomplete-banner">⚠️ Resultados incompletos — ' + avisos.join(' · ') + '. Refine os filtros ou reduza o período.</div>'
         : '';
@@ -1970,6 +1993,7 @@
         '<div class="section-header"><h3>👤 Atribuídos' + (userName ? ' a ' + escHtml(userName) : '') + '</h3><span class="tag tag-blue">' + assigned.length + ' chamado' + (assigned.length !== 1 ? 's' : '') + '</span></div>' +
         renderTable(assigned, 'tbl-assigned') +
         '</div>';
+      return true;
     }
 
     function atualizarKnownIssues(data) {
@@ -2206,6 +2230,7 @@
     }
 
     document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) atualizarTempoFila();
       if (!document.hidden && buscaAtiva) {
         ativarWakeLock();
         pendingCount = 0;
@@ -2222,12 +2247,27 @@
       return Math.floor(diff / 86400) + 'd';
     }
 
+    function classeTempoFila(iso) {
+      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);
+      return horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
+    }
+
     function tempoFilaBadge(iso) {
       if (!iso) return '';
-      var horas = Math.max(0, (Date.now() - new Date(iso).getTime()) / 3600000);
-      var cls = horas < 2 ? 'ok' : horas < 8 ? 'avg' : 'bad';
-      return '<span class="tempo-fila ' + cls + '">há ' + tempoRelativo(iso) + '</span>';
+      return '<span class="tempo-fila ' + classeTempoFila(iso) + '" data-iso="' + escHtml(iso) + '">há ' + tempoRelativo(iso) + '</span>';
     }
+
+    function atualizarTempoFila() {
+      if (document.hidden) return;
+      document.querySelectorAll('.tempo-fila[data-iso]').forEach(function (el) {
+        var iso = el.getAttribute('data-iso');
+        var texto = 'há ' + tempoRelativo(iso);
+        var cls = 'tempo-fila ' + classeTempoFila(iso);
+        if (el.textContent !== texto) el.textContent = texto;
+        if (el.className !== cls) el.className = cls;
+      });
+    }
+    setInterval(atualizarTempoFila, 30000);
 
     function iniciarPolling() {
       document.getElementById('refresh-bar').style.display = 'flex';
@@ -2302,7 +2342,7 @@
       });
 
       var currentKeys = new Set(all.map(function (i) { return i.key; }));
-      var resultadosTruncados = data.totalAssigned > assigned.length;
+      var resultadosTruncados = data.truncated === true;
       var desaparecidos = resultadosTruncados ? [] : Object.keys(knownIssues).filter(function (key) {
         return !currentKeys.has(key) && knownIssues[key].assignee !== null;
       });

@@ -1,4 +1,4 @@
-const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
+const { searchAllIssues, get, JiraError, ConfigError } = require('./_lib/jira');
 const { validateSearchParams, validateTypes, validateDays, validateUsers, ValidationError } = require('./_lib/validate');
 
 const FIELDS = [
@@ -41,6 +41,70 @@ const FUNCIONALIDADES_PRESTACAO_CONTAS = [
   'Relação de Comprovantes do EFD-Reinf',
 ].map(f => f.toLowerCase());
 
+const CACHE_TTL_MS         = Number(process.env.CHAMADOS_CACHE_TTL_MS) || 30_000;
+const CACHE_MAX_ENTRIES    = 100
+const MAX_ISSUES_PER_QUERY = Number(process.env.JIRA_MAX_ISSUES) || 300;
+
+const searchCache = new Map();
+
+function pruneCache() {
+  const now = Date.now();
+  for (const [key, entry] of searchCache) {
+    if (now - entry.ts >= CACHE_TTL_MS) searchCache.delete(key);
+  }
+  while (searchCache.size > CACHE_MAX_ENTRIES) {
+    searchCache.delete(searchCache.keys().next().value);
+  }
+}
+
+function cachedSearch(jql, { bypass = false } = {}) {
+  const now = Date.now();
+  const cached = searchCache.get(jql);
+
+  if (!bypass && cached && now - cached.ts < CACHE_TTL_MS) {
+    return { promise: cached.promise, hit: true };
+  }
+
+  const promise = searchAllIssues(jql, FIELDS, MAX_ISSUES_PER_QUERY);
+  const entry = { ts: now, promise };
+
+  searchCache.delete(jql);
+  searchCache.set(jql, entry);
+
+  promise.catch(() => {
+    if (searchCache.get(jql) === entry) searchCache.delete(jql);
+  });
+
+  pruneCache();
+  return { promise, hit: false };
+}
+
+const TIPOS_TTL_MS = 60 * 60 * 1000;
+const tiposExcluidosCache = { ids: null, ts: 0, promise: null };
+
+async function getExcludedTypeIds() {
+  const now = Date.now();
+  if (tiposExcluidosCache.ids && now - tiposExcluidosCache.ts < TIPOS_TTL_MS) {
+    return tiposExcluidosCache.ids;
+  }
+
+  if (!tiposExcluidosCache.promise) {
+    tiposExcluidosCache.promise = get('/rest/api/2/issuetype')
+      .then(all => {
+        const ids = all
+          .filter(t => NOMES_TIPOS_EXCLUIDOS.includes(t.name))
+          .map(t => String(t.id))
+          .filter(id => /^\d+$/.test(id));
+        tiposExcluidosCache.ids = ids;
+        tiposExcluidosCache.ts  = Date.now();
+        return ids;
+      })
+      .catch(() => [])
+      .finally(() => { tiposExcluidosCache.promise = null; });
+  }
+  return tiposExcluidosCache.promise;
+}
+
 function isPrestacaoContas(funcionalidadesTexto) {
   const texto = String(funcionalidadesTexto || '').toLowerCase();
   return FUNCIONALIDADES_PRESTACAO_CONTAS.some(rotulo => texto.includes(rotulo));
@@ -51,6 +115,8 @@ function filtrarPrestacaoContas(issues, modo) {
   if (modo === 'apenas')  return issues.filter(i => i.isPrestacaoContas);
   return issues;
 }
+
+const EMPTY_RESULT = { issues: [], total: 0, loaded: 0, truncated: false };
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -83,16 +149,25 @@ module.exports = async function handler(req, res) {
     ? req.query.prestacaoContas
     : 'incluir';
 
-  const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
-  const jqlAssigned   = users.length > 0
-    ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
-    : null;
+  const fresh = req.query.fresh === '1';
 
   try {
+    const excludedTypeIds = await getExcludedTypeIds();
+
+    const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned', excludedTypeIds);
+    const jqlAssigned   = users.length > 0
+      ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned', excludedTypeIds)
+      : null;
+
+    const reqUnassigned = cachedSearch(jqlUnassigned, { bypass: fresh });
+    const reqAssigned   = jqlAssigned ? cachedSearch(jqlAssigned, { bypass: fresh }) : null;
+
     const [dataUnassigned, dataAssigned] = await Promise.all([
-      searchIssues(jqlUnassigned, FIELDS),
-      jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
+      reqUnassigned.promise,
+      reqAssigned ? reqAssigned.promise : Promise.resolve(EMPTY_RESULT),
     ]);
+
+    res.setHeader('X-Cache', reqUnassigned.hit && (!reqAssigned || reqAssigned.hit) ? 'HIT' : 'MISS');
 
     const filtrarParceiro = i => mostrarParceiros || !i.isParceiro;
 
@@ -117,6 +192,13 @@ module.exports = async function handler(req, res) {
       unassigned,
       assigned,
       prestacaoContasAtivo: prestacaoContas !== 'incluir',
+      jiraTotalUnassigned: dataUnassigned.total,
+      jiraTotalAssigned:   dataAssigned.total,
+      loadedUnassigned:    dataUnassigned.loaded,
+      loadedAssigned:      dataAssigned.loaded,
+      truncatedUnassigned: dataUnassigned.truncated,
+      truncatedAssigned:   dataAssigned.truncated,
+      truncated:           dataUnassigned.truncated || dataAssigned.truncated,
     });
   } catch (err) {
     if (err instanceof ConfigError) {
@@ -139,7 +221,7 @@ module.exports = async function handler(req, res) {
   }
 };
 
-function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode, excludedTypeIds = []) {
   const clauses = ['statusCategory != Done'];
 
   const typeClauses = [];
@@ -154,6 +236,9 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
     clauses.push(`issuetype in (${typeClauses.join(', ')})`);
   } else {
     clauses.push('issuetype not in subTaskIssueTypes()');
+    if (excludedTypeIds.length > 0) {
+      clauses.push(`issuetype not in (${excludedTypeIds.join(', ')})`);
+    }
   }
 
   if (portfolio && portfolio.length > 0) {
@@ -181,7 +266,7 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
     clauses.push('assignee is EMPTY');
   }
 
-  return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC';
+  return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC, key ASC';
 }
 
 function mapIssue(raw) {
