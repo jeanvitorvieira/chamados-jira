@@ -1,15 +1,6 @@
 const { get, JiraError, ConfigError } = require('./_lib/jira');
+const { TIPOS_EXCLUIDOS } = require('./_lib/tipos-excluidos');
 
-const TIPOS_EXCLUIDOS = new Set([
-  'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
-  'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
-  'Suporte (NÃO USAR - Use Dúvida)',
-  'Análise de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Alteração de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Migração de Dados (NÃO USAR - Use Tratamento de Dados)',
-  'Fora de escopo (NÃO USAR - Use Dúvida)',
-  'Treinamento de Implantação old',
-]);
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {

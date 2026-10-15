@@ -1,4 +1,5 @@
-const { searchIssues, JiraError, ConfigError } = require('./_lib/jira');
+const { searchAllIssues, get, JiraError, ConfigError } = require('./_lib/jira');
+const { TIPOS_EXCLUIDOS } = require('./_lib/tipos-excluidos');
 const { validateSearchParams, validateTypes, validateDays, validateUsers, ValidationError } = require('./_lib/validate');
 
 const FIELDS = [
@@ -7,7 +8,6 @@ const FIELDS = [
   'assignee',
   'priority',
   'issuetype',
-  'created',
   'updated',
   'customfield_32400',
   'customfield_10300',
@@ -17,16 +17,6 @@ const FIELDS = [
   'security'
 ];
 
-const NOMES_TIPOS_EXCLUIDOS = [
-  'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
-  'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
-  'Suporte (NÃO USAR - Use Dúvida)',
-  'Análise de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Alteração de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Migração de Dados (NÃO USAR - Use Tratamento de Dados)',
-  'Fora de escopo (NÃO USAR - Use Dúvida)',
-  'Treinamento de Implantação old',
-];
 
 const FUNCIONALIDADES_PRESTACAO_CONTAS = [
   'Geração arquivos TCE-SC (e-Sfinge)',
@@ -40,6 +30,70 @@ const FUNCIONALIDADES_PRESTACAO_CONTAS = [
   'Envio SisObra',
   'Relação de Comprovantes do EFD-Reinf',
 ].map(f => f.toLowerCase());
+
+const CACHE_TTL_MS         = Number(process.env.CHAMADOS_CACHE_TTL_MS) || 30_000;
+const CACHE_MAX_ENTRIES    = 100;
+const MAX_ISSUES_PER_QUERY = Number(process.env.JIRA_MAX_ISSUES) || 300;
+
+const searchCache = new Map();
+
+function pruneCache() {
+  const now = Date.now();
+  for (const [key, entry] of searchCache) {
+    if (now - entry.ts >= CACHE_TTL_MS) searchCache.delete(key);
+  }
+  while (searchCache.size > CACHE_MAX_ENTRIES) {
+    searchCache.delete(searchCache.keys().next().value);
+  }
+}
+
+function cachedSearch(jql, { bypass = false } = {}) {
+  const now = Date.now();
+  const cached = searchCache.get(jql);
+
+  if (!bypass && cached && now - cached.ts < CACHE_TTL_MS) {
+    return { promise: cached.promise, hit: true };
+  }
+
+  const promise = searchAllIssues(jql, FIELDS, MAX_ISSUES_PER_QUERY);
+  const entry = { ts: now, promise };
+
+  searchCache.delete(jql);
+  searchCache.set(jql, entry);
+
+  promise.catch(() => {
+    if (searchCache.get(jql) === entry) searchCache.delete(jql);
+  });
+
+  pruneCache();
+  return { promise, hit: false };
+}
+
+const TIPOS_TTL_MS = 60 * 60 * 1000;
+const tiposExcluidosCache = { ids: null, ts: 0, promise: null };
+
+async function getExcludedTypeIds() {
+  const now = Date.now();
+  if (tiposExcluidosCache.ids && now - tiposExcluidosCache.ts < TIPOS_TTL_MS) {
+    return tiposExcluidosCache.ids;
+  }
+
+  if (!tiposExcluidosCache.promise) {
+    tiposExcluidosCache.promise = get('/rest/api/2/issuetype')
+      .then(all => {
+        const ids = all
+          .filter(t => TIPOS_EXCLUIDOS.has(t.name))
+          .map(t => String(t.id))
+          .filter(id => /^\d+$/.test(id));
+        tiposExcluidosCache.ids = ids;
+        tiposExcluidosCache.ts  = Date.now();
+        return ids;
+      })
+      .catch(() => [])
+      .finally(() => { tiposExcluidosCache.promise = null; });
+  }
+  return tiposExcluidosCache.promise;
+}
 
 function isPrestacaoContas(funcionalidadesTexto) {
   const texto = String(funcionalidadesTexto || '').toLowerCase();
@@ -98,12 +152,12 @@ module.exports = async function handler(req, res) {
 
     const unassignedBase = (dataUnassigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(i => !TIPOS_EXCLUIDOS.has(i.type))
       .filter(filtrarParceiro);
 
     const assignedBase = (dataAssigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(i => !TIPOS_EXCLUIDOS.has(i.type))
       .filter(filtrarParceiro);
 
     const unassigned = filtrarPrestacaoContas(unassignedBase, prestacaoContas);
@@ -117,6 +171,14 @@ module.exports = async function handler(req, res) {
       unassigned,
       assigned,
       prestacaoContasAtivo: prestacaoContas !== 'incluir',
+
+      jiraTotalUnassigned: dataUnassigned.total,
+      jiraTotalAssigned:   dataAssigned.total,
+      loadedUnassigned:    dataUnassigned.loaded,
+      loadedAssigned:      dataAssigned.loaded,
+      truncatedUnassigned: dataUnassigned.truncated,
+      truncatedAssigned:   dataAssigned.truncated,
+      truncated:           dataUnassigned.truncated || dataAssigned.truncated,
     });
   } catch (err) {
     if (err instanceof ConfigError) {
@@ -197,7 +259,6 @@ function mapIssue(raw) {
     type:      f.issuetype?.name ?? '—',
     assignee:  f.assignee?.displayName ?? null,
     updated:   f.updated,
-    created:   f.created,
     sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
     equipe:    f.customfield_21500?.value ?? null,

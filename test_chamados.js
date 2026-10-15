@@ -1,43 +1,47 @@
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
 let passed = 0, failed = 0;
 const results = [];
 
 function test(name, fn) {
-  try { 
-    fn(); 
-    results.push({ ok: true, name }); 
-    passed++; 
-  } catch(e) { 
-    results.push({ ok: false, name, err: e.message }); 
-    failed++; 
+  try {
+    fn();
+    results.push({ ok: true, name });
+    passed++;
+  } catch (e) {
+    results.push({ ok: false, name, err: e.message });
+    failed++;
   }
 }
 
-function assert(cond, msg)     { if (!cond) throw new Error(msg || 'A asserção falhou'); }
-function eq(a, b, msg)         { if (a !== b) throw new Error((msg||'') + ` -> Esperado: ${JSON.stringify(b)} | Obtido: ${JSON.stringify(a)}`); }
-function deepEq(a, b, msg)     { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg||'') + `\n  Esperado: ${JSON.stringify(b)}\n  Obtido: ${JSON.stringify(a)}`); }
-function noThrow(fn, msg)      { try { fn(); } catch(e) { throw new Error((msg||'') + ': ' + e.message); } }
-function throws(fn, msg)       { let ok = false; try { fn(); } catch { ok = true; } if (!ok) throw new Error(msg || 'Deveria ter lançado uma exceção'); }
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'A asserção falhou'); }
+function eq(a, b, msg) { if (a !== b) throw new Error((msg || '') + ` -> Esperado: ${JSON.stringify(b)} | Obtido: ${JSON.stringify(a)}`); }
+function deepEq(a, b, msg) { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg || '') + `\n  Esperado: ${JSON.stringify(b)}\n  Obtido: ${JSON.stringify(a)}`); }
+function noThrow(fn, msg) { try { fn(); } catch (e) { throw new Error((msg || '') + ': ' + e.message); } }
+function throws(fn, msg) { let ok = false; try { fn(); } catch { ok = true; } if (!ok) throw new Error(msg || 'Deveria ter lançado uma exceção'); }
 function buildCurrent(unassigned, assigned) {
   const current = {};
   unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null, updated: i.updated }; });
-  assigned.forEach(i   => { current[i.key] = { status: i.status, assignee: i.assignee, updated: i.updated }; });
+  assigned.forEach(i => { current[i.key] = { status: i.status, assignee: i.assignee, updated: i.updated }; });
   return current;
 }
 
 function swDetect(known, data) {
   const unassigned = data.unassigned || [];
-  const assigned   = data.assigned   || [];
+  const assigned = data.assigned || [];
   const isFirstRun = Object.keys(known).length === 0;
 
   const current = buildCurrent(unassigned, assigned);
   if (isFirstRun) return { isFirstRun: true, current, novos: [], status: [], mov: [], desap: [] };
 
-  const novos = unassigned.filter(i => { const p=known[i.key]; return !p || p.assignee !== null; });
-  const status = assigned.filter(i  => { const p=known[i.key]; return p && p.status !== i.status; })
+  const novos = unassigned.filter(i => { const p = known[i.key]; return !p || p.assignee !== null; });
+  const status = assigned.filter(i => { const p = known[i.key]; return p && p.status !== i.status; })
     .map(i => ({ ...i, prevStatus: known[i.key].status }));
 
-  const novosKeys  = new Set(novos.map(i=>i.key));
-  const statusKeys = new Set(status.map(i=>i.key));
+  const novosKeys = new Set(novos.map(i => i.key));
+  const statusKeys = new Set(status.map(i => i.key));
 
   const all = unassigned.concat(assigned);
   const mov = all.filter(i => {
@@ -46,7 +50,7 @@ function swDetect(known, data) {
     return p && p.status === i.status && p.updated !== i.updated;
   });
 
-  const currentKeys = new Set(all.map(i=>i.key));
+  const currentKeys = new Set(all.map(i => i.key));
   const trunc = (data.totalAssigned || 0) > assigned.length;
   const desap = trunc ? [] : Object.keys(known).filter(k => !currentKeys.has(k) && known[k].assignee !== null);
 
@@ -55,16 +59,16 @@ function swDetect(known, data) {
 
 function buildParams(config) {
   const params = new URLSearchParams();
-  if (config.vertical)                    params.set('vertical',  config.vertical);
-  if (config.portfolio)                   params.set('portfolio', config.portfolio);
-  if (config.equipe)                      params.set('cf[21500]', config.equipe);
-  if (config.users)                       params.set('users',     config.users);
-  if (config.days && config.days !== '0') params.set('days',      config.days);
+  if (config.vertical) params.set('vertical', config.vertical);
+  if (config.portfolio) params.set('portfolio', config.portfolio);
+  if (config.equipe) params.set('cf[21500]', config.equipe);
+  if (config.users) params.set('users', config.users);
+  if (config.days && config.days !== '0') params.set('days', config.days);
 
   const arrTypeKeys = config.typeIds ? config.typeIds.split(',').filter(Boolean) : [];
   const totalDisponivel = config.totalTiposDisponiveis || 0;
   const todosSelecionados = arrTypeKeys.length >= totalDisponivel && totalDisponivel > 0;
-  
+
   if (arrTypeKeys.length > 0 && !todosSelecionados) {
     params.set('typeIds', arrTypeKeys.join(','));
   }
@@ -84,14 +88,14 @@ function preenchidos(vertical, portfolio, equipe, userNames) {
 function dedup(apiUsers, selectedUsers) {
   const sNames = {}; const sEmails = {};
   return apiUsers.filter(u => {
-    const nk = (u.name  || '').toLowerCase();
+    const nk = (u.name || '').toLowerCase();
     const ek = (u.email || '').toLowerCase();
-    if (sNames[nk])                      return false;
-    if (ek && sEmails[ek])               return false;
+    if (sNames[nk]) return false;
+    if (ek && sEmails[ek]) return false;
     sNames[nk] = true;
     if (ek) sEmails[ek] = true;
     return !selectedUsers.some(s =>
-      (s.name  || '').toLowerCase() === nk ||
+      (s.name || '').toLowerCase() === nk ||
       (ek && (s.email || '').toLowerCase() === ek));
   });
 }
@@ -99,11 +103,11 @@ function dedup(apiUsers, selectedUsers) {
 function mapIssue(raw) {
   const f = raw.fields;
   return {
-    key:       raw.key,
-    status:    f.status?.name ?? '—',
-    statusCat: f.status?.statusCategory?.key ?? '', 
-    assignee:  f.assignee?.displayName ?? null,
-    sistema:   f.customfield_10132?.value ?? null, 
+    key: raw.key,
+    status: f.status?.name ?? '—',
+    statusCat: f.status?.statusCategory?.key ?? '',
+    assignee: f.assignee?.displayName ?? null,
+    sistema: f.customfield_10132?.value ?? null,
   };
 }
 
@@ -146,7 +150,7 @@ function detectarNovidadesSafe(knownIssues, data, detectFn) {
   try {
     detectFn(knownIssues, data);
     detectOk = true;
-  } catch(e) {}
+  } catch (e) { }
   (data.unassigned || []).concat(data.assigned || []).forEach(i => {
     baseline[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
@@ -155,7 +159,7 @@ function detectarNovidadesSafe(knownIssues, data, detectFn) {
 
 test('SW: baseline vazio na execução inicial -> isFirstRun=true, sem notificações', () => {
   const r = swDetect({}, {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
+    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
     assigned: []
   });
   assert(r.isFirstRun, 'Deveria identificar o primeiro ciclo como baseline');
@@ -165,8 +169,8 @@ test('SW: baseline vazio na execução inicial -> isFirstRun=true, sem notifica�
 
 test('SW: baseline inicial preenche o estado current corretamente', () => {
   const r = swDetect({}, {
-    unassigned: [{ key:'A-1', status:'Aberto',      assignee:null,   updated:'t1', summary:'X' }],
-    assigned:   [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'Y' }],
+    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'Y' }],
   });
   eq(r.current['A-1'].assignee, null, 'Jean não deve estar atribuído a A-1');
   eq(r.current['B-1'].assignee, 'Jean', 'Jean deve ser o analista de B-1');
@@ -174,11 +178,11 @@ test('SW: baseline inicial preenche o estado current corretamente', () => {
 });
 
 test('SW: novo chamado sem responsável é devidamente sinalizado', () => {
-  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
   const r = swDetect(known, {
     unassigned: [
-      { key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' },
-      { key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'Novo' },
+      { key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' },
+      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'Novo' },
     ], assigned: []
   });
   eq(r.novos.length, 1, 'Deve detectar exatamente um novo chamado');
@@ -186,9 +190,9 @@ test('SW: novo chamado sem responsável é devidamente sinalizado', () => {
 });
 
 test('SW: chamado atribuído que foi devolvido para a fila -> unassigned de volta', () => {
-  const known = { 'A-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
+  const known = { 'A-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
   const r = swDetect(known, {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t2', summary:'X' }],
+    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }],
     assigned: []
   });
   eq(r.novos.length, 1, 'Chamados devolvidos para a fila contam como novos unassigned');
@@ -196,19 +200,19 @@ test('SW: chamado atribuído que foi devolvido para a fila -> unassigned de volt
 });
 
 test('SW: ticket sem responsável inalterado NÃO dispara', () => {
-  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
   const r = swDetect(known, {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
+    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
     assigned: []
   });
   eq(r.novos.length, 0);
 });
 
 test('SW: mudança de status detectada', () => {
-  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
+  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
   });
   eq(r.status.length, 1, 'Deve disparar mudança de status');
   eq(r.status[0].prevStatus, 'Aberto', 'O status anterior deve ser Aberto');
@@ -216,21 +220,21 @@ test('SW: mudança de status detectada', () => {
 });
 
 test('SW: status idêntico com updated alterado -> movimentação', () => {
-  const known = { 'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
+  const known = { 'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
   });
   eq(r.status.length, 0, 'Não deve reportar mudança de status');
   eq(r.mov.length, 1, 'Modificações no ticket contam como movimentação recente');
 });
 
 test('SW: ticket coberto por novos não entra em movimentação', () => {
-  const known2 = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
+  const known2 = { 'X-1': { status: 'Aberto', assignee: null, updated: 't0' } };
   const r = swDetect(known2, {
     unassigned: [
-      { key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' },
-      { key:'A-2', status:'Aberto', assignee:null, updated:'t1', summary:'Novo' },
+      { key: 'X-1', status: 'Aberto', assignee: null, updated: 't0', summary: 'X' },
+      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't1', summary: 'Novo' },
     ], assigned: []
   });
   assert(!r.mov.some(i => i.key === 'A-2'), 'novo não deve estar em mov');
@@ -238,21 +242,21 @@ test('SW: ticket coberto por novos não entra em movimentação', () => {
 });
 
 test('SW: ticket coberto por statusAlterado não entra em movimentação', () => {
-  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
+  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
   });
   eq(r.mov.length, 0, 'mudança de status não deve duplicar em mov');
 });
 
 test('SW: desaparecidos detectados quando o resultado não for truncado', () => {
   const known = {
-    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
-    'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
+    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
+    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
+    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
     totalAssigned: 1
   });
   eq(r.desap.length, 1); eq(r.desap[0], 'B-2');
@@ -260,41 +264,41 @@ test('SW: desaparecidos detectados quando o resultado não for truncado', () => 
 
 test('SW: desaparecidos ignorados de forma segura quando a paginação estiver truncada', () => {
   const known = {
-    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
-    'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
+    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
+    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
-    totalAssigned: 5 
+    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
+    totalAssigned: 5
   });
   eq(r.desap.length, 0, 'Para evitar falsos alertas de encerramento, o SW ignora desaparecidos se truncado');
 });
 
 test('SW: unassigned não conta como desaparecido', () => {
   const known = {
-    'A-1': { status:'Aberto', assignee:null,   updated:'t1' },
-    'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' },
+    'A-1': { status: 'Aberto', assignee: null, updated: 't1' },
+    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
+    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
     totalAssigned: 1
   });
   assert(!r.desap.includes('A-1'), 'unassigned não deve aparecer em desap');
 });
 
 test('SW: múltiplas detecções não se sobrepõem', () => {
-  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
-  const data = { unassigned:[], assigned:[{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }], totalAssigned:1 };
+  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
+  const data = { unassigned: [], assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }], totalAssigned: 1 };
   const r = swDetect(known, data);
   eq(r.status.length, 1, 'deve estar em status');
   eq(r.mov.length, 0, 'não deve estar em mov');
 });
 
 test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () => {
-  const known = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
+  const known = { 'X-1': { status: 'Aberto', assignee: null, updated: 't0' } };
   const data = {
-    unassigned: [{ key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' }],
-    assigned:   [{ key:'B-9', status:'Aberto', assignee:'Jean', updated:'t1', summary:'Novo atribuído' }],
+    unassigned: [{ key: 'X-1', status: 'Aberto', assignee: null, updated: 't0', summary: 'X' }],
+    assigned: [{ key: 'B-9', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'Novo atribuído' }],
     totalAssigned: 1
   };
   const r = swDetect(known, data);
@@ -303,12 +307,12 @@ test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () =>
 
 test('SW: knownIssues passado pela página é usado como baseline correto', () => {
   const pageKnown = {
-    'A-1': { status:'Aberto',       assignee:null,   updated:'t1' },
-    'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' },
+    'A-1': { status: 'Aberto', assignee: null, updated: 't1' },
+    'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' },
   };
   const r = swDetect(pageKnown, {
-    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
-    assigned:   [{ key:'B-1', status:'Aguardando Manutenção', assignee:'Jean', updated:'t2', summary:'Y' }],
+    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
+    assigned: [{ key: 'B-1', status: 'Aguardando Manutenção', assignee: 'Jean', updated: 't2', summary: 'Y' }],
     totalAssigned: 1
   });
   assert(!r.isFirstRun, 'não deve ser firstRun quando página passa knownIssues');
@@ -335,17 +339,17 @@ test('buildParams: todos os campos enviados corretamente', () => {
 });
 
 test('buildParams: days="0" não é enviado', () => {
-  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'0', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', days: '0', totalTiposDisponiveis: 0 });
   assert(!p.includes('days'), 'days=0 não deve ser enviado');
 });
 
 test('buildParams: days="30" é enviado', () => {
-  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'30', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', days: '30', totalTiposDisponiveis: 0 });
   assert(p.includes('days=30'), 'days=30 deve ser enviado');
 });
 
 test('buildParams: users vazio não é enviado', () => {
-  const p = buildParams({ vertical:'Contábil', portfolio:'P', users:'', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', users: '', totalTiposDisponiveis: 0 });
   assert(!p.includes('users'), 'users vazio não deve ser enviado');
 });
 
@@ -380,7 +384,7 @@ test('buildParams: typeIds enviado quando seleção é parcial', () => {
 });
 
 test('buildParams: equipe não enviada quando vazia', () => {
-  const p = buildParams({ vertical:'Contábil', portfolio:'P', equipe:'', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', equipe: '', totalTiposDisponiveis: 0 });
   assert(!p.includes('cf%5B21500%5D') && !p.includes('cf[21500]'), 'equipe vazia não deve ser enviada');
 });
 
@@ -481,9 +485,9 @@ test('mapIssue: statusCat "indeterminate" para em andamento', () => {
 
 test('detectarNovidades: usa statusCat "done" (key) para detectar encerrados', () => {
   const issues = [
-    { key: 'B-1', statusCat: 'done',           status: 'Resolvido' },
+    { key: 'B-1', statusCat: 'done', status: 'Resolvido' },
     { key: 'B-2', statusCat: 'indeterminate', status: 'Em andamento' },
-    { key: 'B-3', statusCat: 'new',            status: 'Aberto' },
+    { key: 'B-3', statusCat: 'new', status: 'Aberto' },
   ];
   const encerrados = issues.filter(i => i.statusCat === 'done');
   eq(encerrados.length, 1);
@@ -492,33 +496,33 @@ test('detectarNovidades: usa statusCat "done" (key) para detectar encerrados', (
 
 test('Dedup: duplicado por e-mail removido (name é e-mail no estado atual)', () => {
   const api = [
-    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
-    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
+    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon Henrique Ern' },
+    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon Henrique Ern' },
   ];
   const r = dedup(api, []);
   eq(r.length, 1);
 });
 
 test('Dedup: usuário selecionado por e-mail é excluído do autocomplete', () => {
-  const api = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br', displayName:'Filipe Pereira Andrade' }];
-  const sel = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br' }];
+  const api = [{ name: 'filipe.andrade@betha.com.br', email: 'filipe.andrade@betha.com.br', displayName: 'Filipe Pereira Andrade' }];
+  const sel = [{ name: 'filipe.andrade@betha.com.br', email: 'filipe.andrade@betha.com.br' }];
   const r = dedup(api, sel);
   eq(r.length, 0, 'usuário já selecionado não deve aparecer no autocomplete');
 });
 
 test('Dedup: usuário diferente com e-mail diferente mantido', () => {
   const api = [
-    { name:'jean.vieira@betha.com.br',   email:'jean.vieira@betha.com.br',   displayName:'Jean' },
-    { name:'marlon.ern@betha.com.br',    email:'marlon.ern@betha.com.br',    displayName:'Marlon' },
+    { name: 'jean.vieira@betha.com.br', email: 'jean.vieira@betha.com.br', displayName: 'Jean' },
+    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon' },
   ];
-  const sel = [{ name:'jean.vieira@betha.com.br', email:'jean.vieira@betha.com.br' }];
+  const sel = [{ name: 'jean.vieira@betha.com.br', email: 'jean.vieira@betha.com.br' }];
   const r = dedup(api, sel);
   eq(r.length, 1); eq(r[0].name, 'marlon.ern@betha.com.br');
 });
 
 test('Dedup: usuário sem e-mail usa name como fallback', () => {
   const api = [
-    { name:'usuario-interno', email:'', displayName:'Usuário Interno' },
+    { name: 'usuario-interno', email: '', displayName: 'Usuário Interno' },
   ];
   const sel = [];
   const r = dedup(api, sel);
@@ -528,19 +532,19 @@ test('Dedup: usuário sem e-mail usa name como fallback', () => {
 test('Dedup: JQL usa e-mail como assignee (name = e-mail)', () => {
   const rawUser = { name: 'filipe.andrade', emailAddress: 'filipe.andrade@betha.com.br', displayName: 'Filipe Pereira Andrade' };
   const mapped = {
-    name:        rawUser.emailAddress || rawUser.name,
+    name: rawUser.emailAddress || rawUser.name,
     displayName: rawUser.displayName,
-    email:       rawUser.emailAddress,
+    email: rawUser.emailAddress,
   };
   eq(mapped.name, 'filipe.andrade@betha.com.br', 'name deve ser o email para uso no JQL');
 });
 
 test('Consistência: página e SW detectam novosUnassigned da mesma forma', () => {
-  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
   const data = {
     unassigned: [
-      { key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' },
-      { key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'Y' },
+      { key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' },
+      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'Y' },
     ],
     assigned: [], totalAssigned: 0
   };
@@ -549,27 +553,27 @@ test('Consistência: página e SW detectam novosUnassigned da mesma forma', () =
     const prev = known[i.key];
     return !prev || prev.assignee !== null;
   });
-  deepEq(sw.novos.map(i=>i.key), pageNovos.map(i=>i.key), 'SW e página devem concordar em novosUnassigned');
+  deepEq(sw.novos.map(i => i.key), pageNovos.map(i => i.key), 'SW e página devem concordar em novosUnassigned');
 });
 
 test('Consistência: página e SW detectam statusAlterado da mesma forma', () => {
-  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
+  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
   const data = {
     unassigned: [],
-    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }],
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }],
     totalAssigned: 1
   };
   const sw = swDetect(known, data);
-  const pageStatus = data.assigned.filter(i => { const p=known[i.key]; return p && p.status !== i.status; });
+  const pageStatus = data.assigned.filter(i => { const p = known[i.key]; return p && p.status !== i.status; });
   eq(sw.status.length, pageStatus.length);
   eq(sw.status[0]?.key, pageStatus[0]?.key);
 });
 
 test('Consistência: página e SW detectam movimentados da mesma forma', () => {
-  const known = { 'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
+  const known = { 'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
   const data = {
     unassigned: [],
-    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }],
+    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }],
     totalAssigned: 1
   };
   const sw = swDetect(known, data);
@@ -638,34 +642,34 @@ test('sortState: preservado durante refresh silencioso', () => {
 });
 
 test('baseline atualiza mesmo se detectarNovidades lançar exceção', () => {
-  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
-  const data  = { unassigned: [{ key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'X' }], assigned: [] };
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const data = { unassigned: [{ key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }], assigned: [] };
   const r = detectarNovidadesSafe(known, data, () => { throw new Error('erro simulado'); });
   assert(r.baseline['A-2'], 'novo issue deve estar no baseline');
   assert(!r.baseline['A-1'], 'issue antigo não deve persistir');
 });
 
 test('baseline atualiza normalmente sem exceção', () => {
-  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
-  const data  = { unassigned: [{ key:'A-1', status:'Em andamento', assignee:null, updated:'t2', summary:'Y' }], assigned: [] };
+  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const data = { unassigned: [{ key: 'A-1', status: 'Em andamento', assignee: null, updated: 't2', summary: 'Y' }], assigned: [] };
   const r = detectarNovidadesSafe(known, data, (k, d) => swDetect(k, d));
   assert(r.detectOk, 'detect deve ter rodado sem erro');
   eq(r.baseline['A-1'].status, 'Em andamento');
 });
 
 test('AbortController: AbortError silencioso com busca ativa mantém polling', () => {
-  const r = mockCatch({ name:'AbortError' }, true, true);
+  const r = mockCatch({ name: 'AbortError' }, true, true);
   assert(r.reagendado, 'deve reagendar');
   assert(!r.erroExibido, 'não deve exibir erro');
 });
 
 test('AbortController: AbortError em busca manual não exibe erro', () => {
-  const r = mockCatch({ name:'AbortError' }, false, true);
+  const r = mockCatch({ name: 'AbortError' }, false, true);
   assert(!r.erroExibido, 'busca manual abortada não exibe banner de erro');
 });
 
 test('AbortController: erro real (não abort) exibe mensagem', () => {
-  const r = mockCatch({ name:'Error', message:'timeout' }, false, false);
+  const r = mockCatch({ name: 'Error', message: 'timeout' }, false, false);
   assert(r.erroExibido, 'erro real deve ser exibido');
 });
 
@@ -674,9 +678,9 @@ test('Filtragem em memória: tipos excluídos indesejados são expurgados com su
     { key: 'CH-1', fields: { status: { name: 'Aberto' }, issuetype: { name: 'Incidente' } } },
     { key: 'CH-2', fields: { status: { name: 'Aberto' }, issuetype: { name: 'Sub-tarefa' } } },
   ];
-  
+
   const NOMES_TIPOS_EXCLUIDOS = ['Sub-tarefa', 'Ação (sub-tarefa)'];
-  
+
   const filtrados = rawIssues
     .map(i => ({ key: i.key, type: i.fields.issuetype.name }))
     .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
@@ -688,26 +692,840 @@ test('Filtragem em memória: tipos excluídos indesejados são expurgados com su
 test('Filtro de Tipos: validação permite até 150 tipos (Prevenção do bug do corte alfabético)', () => {
   const muitosTipos = Array.from({ length: 160 }, (_, i) => `Tipo${i}`).join(',');
   const resultado = validateTypesMock(muitosTipos);
-  
+
   eq(resultado.length, 150, 'A validação deve limitar e processar no máximo 150 tipos (antigo limite de 50)');
   eq(resultado[0], 'Tipo0', 'O primeiro tipo deve ser o Tipo0');
   eq(resultado[149], 'Tipo149', 'O 150º tipo deve ser mantido antes do corte limítrofe');
 });
 
-console.log('Executando os testes de integração e regressão...\n');
-results.forEach(r => {
-  if (r.ok) console.log(`  ✅ [Passou] ${r.name}`);
-  else { 
-    console.log(`  ❌ [Falhou] ${r.name}`); 
-    console.log(`     -> Erro: ${r.err}`); 
-  }
+test('SW: filtro de prestação de contas ativo NÃO suprime desaparecidos (regressão)', () => {
+  // Antes: truncagem era inferida por totalAssigned > assigned.length, o que ficava
+  // verdadeiro sempre que o filtro de prestação de contas escondia itens, e os
+  // chamados encerrados deixavam de ser detectados. Agora só `truncated` conta.
+  const known = {
+    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
+    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
+  };
+  const r = swDetect(known, {
+    unassigned: [],
+    assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
+    totalAssigned: 5, prestacaoContasAtivo: true, truncated: false
+  });
+  eq(r.desap.length, 1, 'sem truncagem real, o chamado sumido deve ser detectado');
+  eq(r.desap[0], 'B-2');
 });
 
-console.log(`\n${'─'.repeat(62)}`);
-console.log(`Total: ${passed + failed} | ✅ ${passed} passaram | ❌ ${failed} falharam`);
+test('SW: truncagem só na lista sem responsável também suprime desaparecidos', () => {
+  // Um chamado atribuído pode ter voltado para a fila e ficado fora do limite da
+  // lista sem responsável: não dá para afirmar que foi encerrado.
+  const known = { 'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' } };
+  const r = swDetect(known, {
+    unassigned: [], assigned: [],
+    truncatedUnassigned: true, truncatedAssigned: false, truncated: true
+  });
+  eq(r.desap.length, 0);
+});
 
-if (failed > 0) {
-  process.exit(1);
-} else {
-  console.log('Todos os testes foram executados com absoluto sucesso em pt-BR!');
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Backend REAL (api/chamados.js + api/_lib/jira.js)
+//
+// Aqui NÃO há espelhos: o handler verdadeiro roda contra um Jira simulado
+// (global.fetch substituído). Assim os testes quebram se o código de produção
+// quebrar. Cada teste recarrega os módulos (loadHandler) para zerar os caches
+// em memória (cache de consultas e cache de tipos) e não haver vazamento de
+// estado entre testes.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const API_DIR = path.join(__dirname, 'api');
+process.env.JIRA_URL = 'https://jira.test';
+process.env.JIRA_USER = 'svc';
+process.env.JIRA_PASSWORD = 'pwd';
+
+// O handler registra erros esperados (Jira 500/400 simulados) com console.error.
+// Silenciamos para não poluir a saída dos testes; falhas reais aparecem no relatório.
+console.error = () => { };
+
+// Recarrega o handler com módulos "limpos". `env` vale só durante o require,
+// pois TTL do cache e teto de chamados são lidos no carregamento do módulo.
+function loadHandler(env = {}, file = 'chamados.js') {
+  Object.keys(require.cache).forEach(k => { if (k.startsWith(API_DIR)) delete require.cache[k]; });
+  const antigo = {};
+  Object.keys(env).forEach(k => { antigo[k] = process.env[k]; process.env[k] = env[k]; });
+  try {
+    return require(path.join(API_DIR, file));
+  } finally {
+    Object.keys(env).forEach(k => { if (antigo[k] === undefined) delete process.env[k]; else process.env[k] = antigo[k]; });
+  }
+}
+
+function resp(status, text) {
+  return { ok: status >= 200 && status < 300, status, text: async () => text };
+}
+
+function makeRaw(kind, n, unassigned) {
+  return {
+    key: `${kind}-${n}`,
+    fields: {
+      summary: `Chamado ${n}`,
+      status: { name: 'Aberto', statusCategory: { key: 'new' } },
+      priority: { name: 'High' },
+      issuetype: { name: 'Dúvida' },
+      assignee: unassigned ? null : { displayName: 'Jean' },
+      updated: '2026-10-01T10:00:00.000-0300',
+      customfield_10132: { value: 'Contábil Cloud' },
+      customfield_32400: { value: 'Portfólio SC/MG' },
+      customfield_21500: { value: 'Suporte' },
+      customfield_10335: '',
+      security: null,
+    },
+  };
+}
+
+// Instala um Jira falso em global.fetch e devolve o log de chamadas.
+// cfg: unassignedTotal, assignedTotal, pageCap (limite de maxResults do servidor),
+//      types (resposta de /issuetype), failTypes, failSearch(nº da chamada)->status,
+//      delayMs, issueOverride(kind, n, raw)->raw
+function installFakeJira(cfg = {}) {
+  const c = Object.assign({
+    unassignedTotal: 0, assignedTotal: 0, pageCap: null,
+    types: [
+      { id: '10', name: 'Pre-Condition' },
+      { id: '11', name: 'Não utilizar' },
+      { id: '20', name: 'Dúvida' },
+    ],
+    failTypes: false, failSearch: null, delayMs: 0, issueOverride: null,
+  }, cfg);
+
+  const log = { searches: [], typeCalls: 0, cfg: c };
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.endsWith('/rest/api/2/issuetype')) {
+      log.typeCalls++;
+      return c.failTypes ? resp(500, 'erro') : resp(200, JSON.stringify(c.types));
+    }
+    if (u.endsWith('/rest/api/2/search')) {
+      const body = JSON.parse(opts.body);
+      log.searches.push(body);
+      if (c.delayMs) await sleep(c.delayMs);
+      if (c.failSearch) {
+        const st = c.failSearch(log.searches.length);
+        if (st) return resp(st, 'erro simulado');
+      }
+      const unassigned = body.jql.includes('assignee is EMPTY');
+      const total = unassigned ? c.unassignedTotal : c.assignedTotal;
+      const size = c.pageCap ? Math.min(body.maxResults, c.pageCap) : body.maxResults;
+      const n = Math.max(0, Math.min(size, total - body.startAt));
+      const issues = Array.from({ length: n }, (_, i) => {
+        const raw = makeRaw(unassigned ? 'UN' : 'AS', body.startAt + i, unassigned);
+        return c.issueOverride ? c.issueOverride(unassigned ? 'UN' : 'AS', body.startAt + i, raw) : raw;
+      });
+      return resp(200, JSON.stringify({ issues, total, maxResults: size, startAt: body.startAt }));
+    }
+    return resp(404, 'não encontrado');
+  };
+  return log;
+}
+
+async function call(handler, query, method = 'GET') {
+  const res = {
+    headers: {}, code: null, body: null,
+    setHeader(k, v) { this.headers[k] = v; },
+    status(c) { this.code = c; return this; },
+    json(b) { this.body = b; return this; },
+  };
+  await handler({ method, query }, res);
+  return res;
+}
+
+const Q = { vertical: 'Contábil', portfolio: 'Portfólio SC/MG' };
+const offsets = log => log.searches.map(s => s.startAt).sort((a, b) => a - b);
+
+// ── Paginação ────────────────────────────────────────────────────────────────
+
+test('Paginação: 250 chamados -> 3 páginas (0, 100, 200), todos carregados', async () => {
+  const log = installFakeJira({ unassignedTotal: 250 });
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 200);
+  deepEq(offsets(log), [0, 100, 200], 'deve buscar as 3 páginas');
+  eq(r.body.unassigned.length, 250);
+  eq(r.body.loadedUnassigned, 250);
+  eq(r.body.jiraTotalUnassigned, 250);
+  eq(r.body.truncatedUnassigned, false);
+  eq(r.body.truncated, false);
+});
+
+test('Paginação: teto de 300 -> 450 chamados vêm truncados e o front é avisado', async () => {
+  const log = installFakeJira({ unassignedTotal: 450 });
+  const r = await call(loadHandler(), Q);
+  deepEq(offsets(log), [0, 100, 200], 'não deve pedir páginas além do teto');
+  eq(r.body.unassigned.length, 300);
+  eq(r.body.loadedUnassigned, 300);
+  eq(r.body.jiraTotalUnassigned, 450, 'deve informar o total REAL do Jira');
+  eq(r.body.truncatedUnassigned, true);
+  eq(r.body.truncated, true);
+});
+
+test('Paginação: JIRA_MAX_ISSUES customiza o teto', async () => {
+  const log = installFakeJira({ unassignedTotal: 400 });
+  const r = await call(loadHandler({ JIRA_MAX_ISSUES: '150' }), Q);
+  deepEq(offsets(log), [0, 100], 'com teto 150 bastam 2 páginas');
+  eq(r.body.unassigned.length, 150);
+  eq(r.body.truncated, true);
+});
+
+test('Paginação: respeita o maxResults reduzido pelo servidor (cap de 50)', async () => {
+  const log = installFakeJira({ unassignedTotal: 120, pageCap: 50 });
+  const r = await call(loadHandler(), Q);
+  deepEq(offsets(log), [0, 50, 100], 'offsets devem usar o tamanho de página aplicado pelo Jira');
+  eq(r.body.unassigned.length, 120);
+  eq(r.body.truncated, false);
+});
+
+test('Paginação: sem chamados -> 1 requisição, lista vazia, não truncado', async () => {
+  const log = installFakeJira({ unassignedTotal: 0 });
+  const r = await call(loadHandler(), Q);
+  eq(log.searches.length, 1);
+  eq(r.body.unassigned.length, 0);
+  eq(r.body.truncated, false);
+});
+
+test('Paginação: chave repetida entre páginas não gera duplicata na lista', async () => {
+  installFakeJira({
+    unassignedTotal: 150,
+    // o chamado 100 (1º da 2ª página) repete a chave do 99 (último da 1ª página)
+    issueOverride: (kind, n, raw) => { if (n === 100) raw.key = 'UN-99'; return raw; },
+  });
+  const r = await call(loadHandler(), Q);
+  const keys = r.body.unassigned.map(i => i.key);
+  eq(new Set(keys).size, keys.length, 'não pode haver chaves duplicadas');
+});
+
+test('Contagens: unassigned e assigned vêm separados, cada um com seu total do Jira', async () => {
+  const log = installFakeJira({ unassignedTotal: 3, assignedTotal: 2 });
+  const r = await call(loadHandler(), { ...Q, users: 'jean@betha.com.br' });
+  eq(log.searches.length, 2, 'duas consultas: sem responsável + atribuídos');
+  eq(r.body.totalUnassigned, 3);
+  eq(r.body.totalAssigned, 2);
+  eq(r.body.total, 5);
+  eq(r.body.jiraTotalUnassigned, 3);
+  eq(r.body.jiraTotalAssigned, 2);
+  assert(log.searches.some(s => s.jql.includes('assignee is EMPTY')), 'JQL de sem responsável');
+  assert(log.searches.some(s => s.jql.includes('assignee = "jean@betha.com.br"')), 'JQL de atribuídos por e-mail');
+});
+
+test('Contagens: truncagem em apenas uma das listas é reportada separadamente', async () => {
+  installFakeJira({ unassignedTotal: 10, assignedTotal: 450 });
+  const r = await call(loadHandler(), { ...Q, users: 'jean@betha.com.br' });
+  eq(r.body.truncatedUnassigned, false);
+  eq(r.body.truncatedAssigned, true);
+  eq(r.body.truncated, true, 'truncated geral é verdadeiro se qualquer lista truncou');
+  eq(r.body.jiraTotalAssigned, 450);
+});
+
+// ── Cache e deduplicação ─────────────────────────────────────────────────────
+
+test('Cache: segunda chamada idêntica vem do cache (X-Cache: HIT) sem ir ao Jira', async () => {
+  const log = installFakeJira({ unassignedTotal: 5 });
+  const h = loadHandler();
+  const r1 = await call(h, Q);
+  eq(r1.headers['X-Cache'], 'MISS');
+  const antes = log.searches.length;
+  const r2 = await call(h, Q);
+  eq(r2.headers['X-Cache'], 'HIT');
+  eq(log.searches.length, antes, 'nenhuma nova consulta ao Jira');
+  eq(r2.body.unassigned.length, 5, 'o conteúdo servido do cache é o mesmo');
+});
+
+test('Cache: filtros diferentes não compartilham cache', async () => {
+  const log = installFakeJira({ unassignedTotal: 2 });
+  const h = loadHandler();
+  await call(h, { vertical: 'Contábil', portfolio: 'Portfólio SC/MG' });
+  const r2 = await call(h, { vertical: 'Pessoal', portfolio: 'Portfólio SC/MG' });
+  eq(r2.headers['X-Cache'], 'MISS');
+  eq(log.searches.length, 2);
+});
+
+test('Cache: fresh=1 ignora o cache, mas o resultado novo realimenta o cache', async () => {
+  const log = installFakeJira({ unassignedTotal: 2 });
+  const h = loadHandler();
+  await call(h, Q);
+  const r2 = await call(h, { ...Q, fresh: '1' });
+  eq(r2.headers['X-Cache'], 'MISS', 'busca manual deve consultar o Jira de novo');
+  eq(log.searches.length, 2);
+  const r3 = await call(h, Q);
+  eq(r3.headers['X-Cache'], 'HIT', 'polling seguinte aproveita o resultado da busca fresca');
+  eq(log.searches.length, 2);
+});
+
+test('Cache: TTL expira e a consulta volta ao Jira', async () => {
+  const log = installFakeJira({ unassignedTotal: 2 });
+  const h = loadHandler({ CHAMADOS_CACHE_TTL_MS: '30' });
+  await call(h, Q);
+  await sleep(70);
+  const r2 = await call(h, Q);
+  eq(r2.headers['X-Cache'], 'MISS');
+  eq(log.searches.length, 2);
+});
+
+test('Deduplicação: 3 requisições simultâneas geram UMA consulta ao Jira', async () => {
+  const log = installFakeJira({ unassignedTotal: 5, delayMs: 25 });
+  const h = loadHandler();
+  const rs = await Promise.all([call(h, Q), call(h, Q), call(h, Q)]);
+  eq(log.searches.length, 1, 'só uma chamada deve chegar ao Jira');
+  rs.forEach(r => { eq(r.code, 200); eq(r.body.unassigned.length, 5); });
+});
+
+test('Cache: falha do Jira NÃO fica em cache — próxima tentativa consulta de novo', async () => {
+  const log = installFakeJira({ unassignedTotal: 4, failSearch: n => (n === 1 ? 500 : null) });
+  const h = loadHandler();
+  const r1 = await call(h, Q);
+  eq(r1.code, 502);
+  eq(r1.body.code, 'JIRA_ERROR');
+  const r2 = await call(h, Q);
+  eq(r2.code, 200, 'a segunda chamada não pode herdar o erro');
+  eq(r2.headers['X-Cache'], 'MISS');
+  eq(log.searches.length, 2);
+});
+
+// ── Filtros no JQL ───────────────────────────────────────────────────────────
+
+test('JQL: tipos obsoletos são excluídos por ID (só os que existem no Jira)', async () => {
+  const log = installFakeJira({ unassignedTotal: 1 });
+  await call(loadHandler(), Q);
+  const jql = log.searches[0].jql;
+  assert(jql.includes('issuetype not in (10, 11)'), 'deve excluir os IDs 10 e 11. JQL: ' + jql);
+  assert(!jql.includes('20'), 'o tipo legítimo (id 20) não pode ser excluído');
+  assert(jql.includes('issuetype not in subTaskIssueTypes()'), 'subtarefas continuam excluídas');
+});
+
+test('JQL: nome de tipo inexistente no Jira não entra na consulta (evita HTTP 400)', async () => {
+  const log = installFakeJira({ unassignedTotal: 1, types: [{ id: '20', name: 'Dúvida' }] });
+  await call(loadHandler(), Q);
+  assert(!/issuetype not in \(/.test(log.searches[0].jql), 'sem tipos excluídos existentes, não deve haver a cláusula');
+});
+
+test('JQL: com typeIds explícito usa "issuetype in" e não repete a exclusão', async () => {
+  const log = installFakeJira({ unassignedTotal: 1 });
+  await call(loadHandler(), { ...Q, typeIds: '20' });
+  const jql = log.searches[0].jql;
+  assert(jql.includes('issuetype in (20)'), 'JQL: ' + jql);
+  assert(!/issuetype not in \(/.test(jql), 'a exclusão só vale quando nenhum tipo foi escolhido');
+});
+
+test('JQL: ORDER BY tem desempate por key (paginação estável)', async () => {
+  const log = installFakeJira({ unassignedTotal: 1 });
+  await call(loadHandler(), Q);
+  assert(log.searches[0].jql.endsWith('ORDER BY priority ASC, updated DESC, key ASC'), 'JQL: ' + log.searches[0].jql);
+});
+
+test('Tipos excluídos: lista de IDs é cacheada (1 chamada a /issuetype para várias buscas)', async () => {
+  const log = installFakeJira({ unassignedTotal: 1 });
+  const h = loadHandler();
+  await call(h, { vertical: 'Contábil', portfolio: 'Portfólio SC/MG' });
+  await call(h, { vertical: 'Pessoal', portfolio: 'Portfólio SC/MG' });
+  await call(h, { vertical: 'Contratos', portfolio: 'Portfólio SC/MG' });
+  eq(log.typeCalls, 1);
+});
+
+test('Tipos excluídos: falha em /issuetype não derruba a busca; filtro por nome no Node segura', async () => {
+  const log = installFakeJira({
+    unassignedTotal: 5, failTypes: true,
+    issueOverride: (kind, n, raw) => { if (n === 0) raw.fields.issuetype.name = 'Pre-Condition'; return raw; },
+  });
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 200, 'a busca deve funcionar mesmo sem a lista de IDs');
+  assert(!/issuetype not in \(/.test(log.searches[0].jql), 'sem IDs, sem a cláusula extra');
+  eq(r.body.unassigned.length, 4, 'o tipo excluído que veio do Jira é removido no Node');
+  assert(!r.body.unassigned.some(i => i.type === 'Pre-Condition'));
+});
+
+// ── Filtros que continuam no Node ────────────────────────────────────────────
+
+test('Parceiros: ocultos por padrão e exibidos com mostrarParceiros=true (mesma consulta em cache)', async () => {
+  const log = installFakeJira({
+    unassignedTotal: 10,
+    issueOverride: (kind, n, raw) => { if (n % 2 === 0) raw.fields.security = { name: 'Parceiro X' }; return raw; },
+  });
+  const h = loadHandler();
+  const r1 = await call(h, Q);
+  eq(r1.body.unassigned.length, 5);
+  const r2 = await call(h, { ...Q, mostrarParceiros: 'true' });
+  eq(r2.body.unassigned.length, 10);
+  eq(r2.headers['X-Cache'], 'HIT', 'o filtro é pós-cache: não gera nova consulta ao Jira');
+  eq(log.searches.length, 1);
+});
+
+test('Prestação de contas: excluir/apenas filtram no Node sem nova consulta ao Jira', async () => {
+  const log = installFakeJira({
+    unassignedTotal: 10,
+    issueOverride: (kind, n, raw) => { if (n < 3) raw.fields.customfield_10335 = 'SIOPE, Outra coisa'; return raw; },
+  });
+  const h = loadHandler();
+  const todos = await call(h, Q);
+  const excluir = await call(h, { ...Q, prestacaoContas: 'excluir' });
+  const apenas = await call(h, { ...Q, prestacaoContas: 'apenas' });
+  eq(todos.body.unassigned.length, 10);
+  eq(excluir.body.unassigned.length, 7);
+  eq(apenas.body.unassigned.length, 3);
+  eq(excluir.body.prestacaoContasAtivo, true);
+  eq(todos.body.prestacaoContasAtivo, false);
+  eq(excluir.body.totalUnassigned, 10, 'totalUnassigned é a contagem antes do filtro de prestação');
+  eq(log.searches.length, 1, 'os três modos reaproveitam a mesma consulta em cache');
+});
+
+// ── Erros da API ─────────────────────────────────────────────────────────────
+
+test('API: método diferente de GET retorna 405', async () => {
+  installFakeJira();
+  const r = await call(loadHandler(), Q, 'POST');
+  eq(r.code, 405);
+  eq(r.body.code, 'METHOD_NOT_ALLOWED');
+});
+
+test('API: vertical fora da whitelist retorna 400 INVALID_PARAMS', async () => {
+  installFakeJira();
+  const r = await call(loadHandler(), { vertical: 'Inexistente' });
+  eq(r.code, 400);
+  eq(r.body.code, 'INVALID_PARAMS');
+});
+
+test('API: Jira respondendo 400 vira INVALID_FILTER e não é cacheado', async () => {
+  const log = installFakeJira({ unassignedTotal: 1, failSearch: () => 400 });
+  const h = loadHandler();
+  const r = await call(h, Q);
+  eq(r.code, 400);
+  eq(r.body.code, 'INVALID_FILTER');
+  log.cfg.failSearch = null;
+  const r2 = await call(h, Q);
+  eq(r2.code, 200);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Frontend REAL (public/index.html)
+//
+// As funções puras abaixo são EXTRAÍDAS do próprio index.html e executadas,
+// em vez de copiadas para cá: se alguém alterar a regra no front, o teste vê.
+// O que depende de DOM (renderResults) é coberto por um espelho mínimo do
+// "portão" de renderização, usando a assinatura real.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const HTML_SRC = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+
+function extractFunction(src, name) {
+  const start = src.indexOf('function ' + name + '(');
+  if (start === -1) throw new Error('Função não encontrada no index.html: ' + name);
+  const open = src.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) return src.slice(start, i + 1);
+  }
+  throw new Error('Chaves desbalanceadas em ' + name);
+}
+
+const FRONT = new Function(
+  ['escHtml', 'tempoRelativo', 'classeTempoFila', 'tempoFilaBadge', 'assinaturaDados', 'segundosRestantes']
+    .map(n => extractFunction(HTML_SRC, n)).join('\n') +
+  '\nreturn { escHtml, tempoRelativo, classeTempoFila, tempoFilaBadge, assinaturaDados, segundosRestantes };'
+)();
+
+const issue = o => Object.assign({
+  key: 'A-1', summary: 'S', portfolio: 'P', sistema: 'Sis', equipe: 'Suporte',
+  assignee: null, status: 'Aberto', priority: 'High', type: 'Dúvida', updated: 't1',
+}, o);
+const dados = (u, a, extra) => Object.assign({
+  unassigned: u, assigned: a, prestacaoContasAtivo: false,
+  truncatedUnassigned: false, truncatedAssigned: false,
+  jiraTotalUnassigned: u.length, jiraTotalAssigned: a.length,
+}, extra);
+const clone = o => JSON.parse(JSON.stringify(o));
+const sig = FRONT.assinaturaDados;
+
+// Espelho do portão de renderização de renderResults():
+//   skipIfUnchanged && assinatura igual -> não mexe no DOM
+let _renders = 0;
+function novoPortao() {
+  let ultima = null; _renders = 0;
+  return {
+    render(data, opts) {
+      const s = sig(data);
+      if (opts && opts.skipIfUnchanged && s === ultima) return false;
+      ultima = s; _renders++; return true;
+    },
+    invalidar() { ultima = null; },   // DOM trocado por spinner/erro/aviso
+  };
+}
+
+test('Assinatura: dados idênticos (objetos distintos) geram a mesma assinatura', () => {
+  const d = dados([issue({ key: 'A-1' })], [issue({ key: 'B-1', assignee: 'Jean' })]);
+  eq(sig(d), sig(clone(d)));
+});
+
+test('Assinatura: muda quando status, updated, prioridade ou responsável mudam', () => {
+  const base = dados([issue()], [issue({ key: 'B-1', assignee: 'Jean' })]);
+  const mutacoes = [
+    d => { d.unassigned[0].status = 'Em andamento'; },
+    d => { d.unassigned[0].updated = 't2'; },
+    d => { d.unassigned[0].priority = 'Low'; },
+    d => { d.assigned[0].assignee = 'Maria'; },
+    d => { d.assigned[0].summary = 'outro resumo'; },
+  ];
+  mutacoes.forEach((m, idx) => {
+    const d = clone(base); m(d);
+    assert(sig(d) !== sig(base), 'mutação #' + idx + ' deveria alterar a assinatura');
+  });
+});
+
+test('Assinatura: muda quando um chamado entra, sai ou troca de lista', () => {
+  const base = dados([issue({ key: 'A-1' })], [issue({ key: 'B-1', assignee: 'Jean' })]);
+  assert(sig(dados([issue({ key: 'A-1' }), issue({ key: 'A-2' })], base.assigned)) !== sig(base), 'entrou');
+  assert(sig(dados([], base.assigned)) !== sig(base), 'saiu');
+  assert(sig(dados([issue({ key: 'B-1' })], [issue({ key: 'A-1', assignee: 'Jean' })])) !== sig(base), 'trocou de lista');
+});
+
+test('Assinatura: muda quando a ordem dos chamados muda', () => {
+  const a = issue({ key: 'A-1' }), b = issue({ key: 'A-2' });
+  assert(sig(dados([a, b], [])) !== sig(dados([b, a], [])));
+});
+
+test('Assinatura: muda com flags de truncagem e de prestação de contas (banners)', () => {
+  const base = dados([issue()], []);
+  assert(sig(dados(base.unassigned, [], { truncatedUnassigned: true })) !== sig(base), 'truncatedUnassigned');
+  assert(sig(dados(base.unassigned, [], { truncatedAssigned: true })) !== sig(base), 'truncatedAssigned');
+  assert(sig(dados(base.unassigned, [], { prestacaoContasAtivo: true })) !== sig(base), 'prestacaoContasAtivo');
+  assert(sig(dados(base.unassigned, [], { jiraTotalUnassigned: 999 })) !== sig(base), 'jiraTotal');
+});
+
+test('Assinatura: campos que não aparecem na tabela (created) não forçam re-render', () => {
+  const a = dados([issue({ created: 'c1' })], []);
+  const b = dados([issue({ created: 'c2' })], []);
+  eq(sig(a), sig(b));
+});
+
+test('Assinatura: tolera resposta sem listas', () => {
+  noThrow(() => sig({}), 'assinaturaDados({}) não deve lançar');
+  eq(typeof sig({}), 'string');
+  eq(sig({}), sig({ unassigned: [], assigned: [] }), 'ausência de listas equivale a listas vazias');
+});
+
+test('Render: polling com dados idênticos NÃO redesenha as tabelas', () => {
+  const p = novoPortao();
+  const d = dados([issue()], []);
+  eq(p.render(d), true, 'primeira renderização sempre acontece');
+  eq(p.render(clone(d), { skipIfUnchanged: true }), false, 'polling idêntico deve ser pulado');
+  eq(p.render(clone(d), { skipIfUnchanged: true }), false);
+  eq(_renders, 1);
+});
+
+test('Render: polling com dados alterados redesenha', () => {
+  const p = novoPortao();
+  const d = dados([issue()], []);
+  p.render(d);
+  const novo = clone(d); novo.unassigned[0].status = 'Em andamento';
+  eq(p.render(novo, { skipIfUnchanged: true }), true);
+  eq(_renders, 2);
+});
+
+test('Render: busca manual (sem skipIfUnchanged) sempre redesenha, mesmo com dados idênticos', () => {
+  const p = novoPortao();
+  const d = dados([issue()], []);
+  p.render(d);
+  eq(p.render(clone(d)), true);
+  eq(_renders, 2);
+});
+
+test('Render: ordenar por coluna (re-render sem skip) redesenha mesmo sem dado novo', () => {
+  const p = novoPortao();
+  const d = dados([issue()], []);
+  p.render(d);
+  eq(p.render(d), true, 'onSort chama renderResults sem skipIfUnchanged');
+});
+
+test('Render: após o DOM virar spinner/erro/aviso, o próximo polling idêntico REDESENHA (regressão)', () => {
+  // Cenário: busca ok -> nova busca manual falha e mostra erro -> polling volta
+  // com dados iguais aos de antes. Sem invalidar a assinatura o erro ficaria na tela.
+  const p = novoPortao();
+  const d = dados([issue()], []);
+  p.render(d);
+  p.invalidar();
+  eq(p.render(clone(d), { skipIfUnchanged: true }), true, 'a tela precisa voltar para as tabelas');
+});
+
+test('Tempo na fila: classe por faixa (<2h ok, <8h avg, >=8h bad)', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  Date.now = () => AGORA;
+  try {
+    const ha = h => new Date(AGORA - h * 3600000).toISOString();
+    eq(FRONT.classeTempoFila(ha(0.5)), 'ok');
+    eq(FRONT.classeTempoFila(ha(1.99)), 'ok');
+    eq(FRONT.classeTempoFila(ha(2)), 'avg');
+    eq(FRONT.classeTempoFila(ha(7.9)), 'avg');
+    eq(FRONT.classeTempoFila(ha(8)), 'bad');
+    eq(FRONT.classeTempoFila(ha(72)), 'bad');
+  } finally { Date.now = real; }
+});
+
+test('Tempo na fila: data no futuro (relógio dessincronizado) é tratada como "ok"', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  Date.now = () => AGORA;
+  try {
+    eq(FRONT.classeTempoFila(new Date(AGORA + 3600000).toISOString()), 'ok');
+  } finally { Date.now = real; }
+});
+
+test('Tempo na fila: badge guarda data-iso (necessário para atualizar sem re-render)', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  Date.now = () => AGORA;
+  try {
+    const iso = new Date(AGORA - 30 * 60000).toISOString();
+    const html = FRONT.tempoFilaBadge(iso);
+    assert(html.includes('data-iso="' + iso + '"'), 'badge sem data-iso: ' + html);
+    assert(html.includes('class="tempo-fila ok"'), 'classe inicial incorreta: ' + html);
+    assert(html.includes('há 30min'), 'texto inicial incorreto: ' + html);
+  } finally { Date.now = real; }
+});
+
+test('Tempo na fila: badge sem data retorna string vazia e data-iso é escapado (XSS)', () => {
+  eq(FRONT.tempoFilaBadge(''), '');
+  eq(FRONT.tempoFilaBadge(null), '');
+  const html = FRONT.tempoFilaBadge('2026-01-01"><img src=x onerror=alert(1)>');
+  assert(!html.includes('"><img'), 'atributo data-iso deve ser escapado: ' + html);
+});
+
+test('Tempo relativo: atualização por intervalo muda o texto conforme o tempo passa', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  try {
+    const iso = new Date(AGORA - 59 * 60000).toISOString();
+    Date.now = () => AGORA;
+    eq(FRONT.tempoRelativo(iso), '59min');
+    Date.now = () => AGORA + 2 * 60000;          // 2 minutos depois (sem nenhum fetch)
+    eq(FRONT.tempoRelativo(iso), '1h', 'o badge deve evoluir sozinho para "1h"');
+  } finally { Date.now = real; }
+});
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Campo `created` removido e lista única de tipos excluídos
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('Payload: `created` não é pedido ao Jira nem devolvido ao front', async () => {
+  const log = installFakeJira({ unassignedTotal: 2 });
+  const r = await call(loadHandler(), Q);
+  assert(!log.searches[0].fields.includes('created'), 'fields enviados: ' + log.searches[0].fields.join(','));
+  assert(log.searches[0].fields.includes('updated'), '`updated` continua necessário');
+  assert(!('created' in r.body.unassigned[0]), 'o chamado mapeado não deve ter `created`');
+});
+
+test('Tipos excluídos: módulo compartilhado exporta array congelado e Set equivalente', () => {
+  const m = require(path.join(API_DIR, '_lib', 'tipos-excluidos.js'));
+  assert(Array.isArray(m.NOMES_TIPOS_EXCLUIDOS) && m.NOMES_TIPOS_EXCLUIDOS.length > 0);
+  assert(Object.isFrozen(m.NOMES_TIPOS_EXCLUIDOS), 'lista deve ser imutável');
+  eq(m.TIPOS_EXCLUIDOS.size, m.NOMES_TIPOS_EXCLUIDOS.length);
+  m.NOMES_TIPOS_EXCLUIDOS.forEach(n => assert(m.TIPOS_EXCLUIDOS.has(n), 'Set sem ' + n));
+});
+
+test('Tipos excluídos: fonte única — tipos.js e chamados.js não têm cópia da lista', () => {
+  const fonte = fs.readFileSync(path.join(API_DIR, '_lib', 'tipos-excluidos.js'), 'utf8');
+  const tipos = fs.readFileSync(path.join(API_DIR, 'tipos.js'), 'utf8');
+  const chamad = fs.readFileSync(path.join(API_DIR, 'chamados.js'), 'utf8');
+  assert(fonte.includes('NÃO USAR'), 'a lista deve viver em _lib/tipos-excluidos.js');
+  ['Pre-Condition', 'NÃO USAR', 'Sub-tarefa'].forEach(marca => {
+    assert(!tipos.includes(marca), 'tipos.js voltou a ter uma cópia da lista (' + marca + ')');
+    assert(!chamad.includes(marca), 'chamados.js voltou a ter uma cópia da lista (' + marca + ')');
+  });
+  assert(tipos.includes("require('./_lib/tipos-excluidos')"), 'tipos.js deve importar a lista compartilhada');
+  assert(chamad.includes("require('./_lib/tipos-excluidos')"), 'chamados.js deve importar a lista compartilhada');
+});
+
+test('tipos.js: oculta os tipos excluídos, agrupa por nome, ordena e define Cache-Control', async () => {
+  installFakeJira({
+    types: [
+      { id: '10', name: 'Pre-Condition' },
+      { id: '11', name: 'Não utilizar' },
+      { id: '12', name: 'Sub-tarefa', subtask: true },
+      { id: '20', name: 'Dúvida' },
+      { id: '21', name: 'Dúvida' },
+      { id: '30', name: 'Atividade' },
+    ],
+  });
+  const r = await call(loadHandler({}, 'tipos.js'), {});
+  eq(r.code, 200);
+  deepEq(r.body.tipos.map(t => t.name), ['Atividade', 'Dúvida'], 'excluídos fora e ordem pt-BR');
+  deepEq(r.body.tipos[1].ids, ['20', '21'], 'IDs do mesmo nome agrupados');
+  assert(/max-age=3600/.test(r.headers['Cache-Control'] || ''), 'Cache-Control ausente');
+});
+
+test('Tipos: o que o seletor (tipos.js) esconde é o que as consultas (chamados.js) excluem', async () => {
+  const types = [
+    { id: '10', name: 'Pre-Condition' }, { id: '11', name: 'Não utilizar' },
+    { id: '12', name: 'Suporte (NÃO USAR - Use Dúvida)' }, { id: '20', name: 'Dúvida' },
+  ];
+  const log = installFakeJira({ unassignedTotal: 1, types });
+  const seletor = await call(loadHandler({}, 'tipos.js'), {});
+  await call(loadHandler(), Q);
+  const escondidos = types.filter(t => !seletor.body.tipos.some(x => x.name === t.name)).map(t => t.id).sort();
+  const m = log.searches[0].jql.match(/issuetype not in \(([^)]*)\)/);
+  assert(m, 'JQL sem exclusão de tipos: ' + log.searches[0].jql);
+  deepEq(m[1].split(',').map(x => x.trim()).sort(), escondidos, 'listas divergiram');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Worker de polling REAL (public/timer-worker.js)
+//
+// O arquivo é executado em um sandbox (vm) com relógio e timers FALSOS, então os
+// testes são instantâneos e determinísticos (nada de esperar 60s de verdade).
+// ═════════════════════════════════════════════════════════════════════════════
+
+function loadWorker() {
+  const src = fs.readFileSync(path.join(__dirname, 'public', 'timer-worker.js'), 'utf8');
+  const clock = { now: 1000000 };
+  const timers = new Map();
+  const posted = [];
+  const cleared = [];
+  let nextId = 1;
+  const ctx = {
+    self: { postMessage: m => posted.push(m) },
+    Date: { now: () => clock.now },
+    setTimeout: (fn, ms) => { const id = nextId++; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: id => { cleared.push(id); timers.delete(id); },
+  };
+  vm.runInNewContext(src, ctx);
+  return {
+    clock, timers, posted, cleared,
+    send: msg => ctx.self.onmessage({ data: msg }),
+    // dispara o próximo timer pendente (sem avançar o relógio)
+    fire() { const [id, t] = timers.entries().next().value; timers.delete(id); t.fn(); },
+    nextDelay() { return timers.values().next().value.ms; },
+  };
+}
+
+test('Worker: contagem completa envia apenas UM "done" e nenhum "tick"', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 5000, gen: 7 });
+  let ciclos = 0;
+  while (w.posted.length === 0 && ciclos++ < 100) {
+    w.clock.now += w.nextDelay();
+    w.fire();
+  }
+  eq(w.posted.length, 1, 'nenhuma mensagem além do done');
+  deepEq(w.posted[0], { type: 'done', gen: 7 });
+  eq(w.timers.size, 0, 'sem timers pendentes depois do done');
+});
+
+test('Worker: checagem interna a cada 1s, mas nunca espera mais do que falta', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 60000, gen: 1 });
+  eq(w.nextDelay(), 1000, 'com muito tempo restante, checa a cada 1s');
+  const w2 = loadWorker();
+  w2.send({ cmd: 'start', endAt: w2.clock.now + 400, gen: 1 });
+  eq(w2.nextDelay(), 400, 'restando 400ms, agenda exatamente 400ms');
+});
+
+test('Worker: usa o relógio de parede — após suspensão do computador dispara no 1º timer', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 60000, gen: 2 });
+  w.clock.now += 10 * 60000;           // o computador "dormiu" 10 minutos
+  w.fire();                            // o timer pendente acorda
+  eq(w.posted.length, 1, 'deve disparar de imediato, sem esperar mais 60s');
+  eq(w.posted[0].type, 'done');
+});
+
+test('Worker: dispara se o timer vier 1ms antes do prazo (reagenda o restante)', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 1000, gen: 1 });
+  w.clock.now += 999;                  // setTimeout adiantado
+  w.fire();
+  eq(w.posted.length, 0, 'ainda não chegou ao prazo');
+  eq(w.nextDelay(), 1, 'reagenda apenas o 1ms que falta');
+  w.clock.now += 1; w.fire();
+  eq(w.posted.length, 1);
+});
+
+test('Worker: stop cancela a contagem e nada é enviado', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 3000, gen: 1 });
+  w.send({ cmd: 'stop' });
+  eq(w.timers.size, 0, 'timer cancelado');
+  eq(w.posted.length, 0);
+});
+
+test('Worker: novo start substitui o anterior e o done usa o gen mais novo', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 5000, gen: 1 });
+  const primeiro = Array.from(w.timers.keys())[0];
+  w.send({ cmd: 'start', endAt: w.clock.now + 2000, gen: 2 });
+  assert(w.cleared.includes(primeiro), 'o timer do start anterior deve ser limpo');
+  eq(w.timers.size, 1, 'só um timer ativo');
+  w.clock.now += 2000; w.fire();
+  deepEq(w.posted, [{ type: 'done', gen: 2 }]);
+});
+
+test('Worker: aceita `interval` (segundos) por compatibilidade', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', interval: 3, gen: 4 });
+  w.clock.now += 3000; w.fire();
+  deepEq(w.posted, [{ type: 'done', gen: 4 }]);
+});
+
+test('Worker: start sem endAt nem interval usa 60s', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', gen: 1 });
+  w.clock.now += 59999; w.fire();
+  eq(w.posted.length, 0, 'antes dos 60s não dispara');
+  w.clock.now += 1; w.fire();
+  eq(w.posted.length, 1);
+});
+
+test('Rótulo de contagem: segundosRestantes arredonda para cima e nunca fica negativo', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  Date.now = () => AGORA;
+  try {
+    eq(FRONT.segundosRestantes(AGORA + 60000), 60);
+    eq(FRONT.segundosRestantes(AGORA + 59500), 60, 'ceil: 59,5s mostra 60');
+    eq(FRONT.segundosRestantes(AGORA + 1), 1);
+    eq(FRONT.segundosRestantes(AGORA), 0);
+    eq(FRONT.segundosRestantes(AGORA - 5000), 0, 'prazo vencido não pode ser negativo');
+  } finally { Date.now = real; }
+});
+
+test('Front: a página não depende mais de "tick" do worker nem de transição de 1s na barra', () => {
+  assert(!/type\s*===\s*'tick'/.test(HTML_SRC), 'index.html ainda trata mensagens tick');
+  assert(!/transition:\s*width\s*1s/.test(HTML_SRC), 'a barra voltou a ter transição de 1s por tick');
+  assert(/transition\s*=\s*'width '\s*\+\s*REFRESH_INTERVAL/.test(HTML_SRC), 'transição deve acompanhar REFRESH_INTERVAL');
+  assert(/cmd:\s*'start',\s*endAt:/.test(HTML_SRC), 'a página deve enviar o prazo absoluto (endAt) ao worker');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Execução
+// ─────────────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('Executando os testes de integração e regressão...\n');
+  for (const t of queue) {
+    try {
+      await t.fn();
+      results.push({ ok: true, name: t.name });
+      passed++;
+    } catch (e) {
+      results.push({ ok: false, name: t.name, err: e.message });
+      failed++;
+    }
+  }
+
+  results.forEach(r => {
+    if (r.ok) console.log(`  ✅ [Passou] ${r.name}`);
+    else {
+      console.log(`  ❌ [Falhou] ${r.name}`);
+      console.log(`     -> Erro: ${r.err}`);
+    }
+  });
+
+  console.log(`\n${'─'.repeat(62)}`);
+  console.log(`Total: ${passed + failed} | ✅ ${passed} passaram | ❌ ${failed} falharam`);
+
+  if (failed > 0) {
+    process.exit(1);
+  } else {
+    console.log('Todos os testes foram executados com absoluto sucesso em pt-BR!');
+  }
 }
