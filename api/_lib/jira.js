@@ -26,16 +26,23 @@ async function request(path, options = {}) {
   const timeoutId  = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`${url}${path}`, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type':  'application/json',
-        'Accept':        'application/json',
-        ...(options.headers ?? {}),
-      },
-    });
+    let response;
+    try {
+      response = await fetch(`${url}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type':  'application/json',
+          'Accept':        'application/json',
+          ...(options.headers ?? {}),
+        },
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      const causa = err.cause?.code || err.cause?.message || err.message;
+      throw new JiraError(`Falha de rede ao consultar o Jira (${causa})`, 0, `${path}: ${causa}`);
+    }
 
     if (!response.ok) {
       let detail = '';
@@ -65,6 +72,31 @@ async function searchIssues(jql, fields, startAt = 0, pageSize = 100) {
     total:  data.total  ?? 0,
     ...data,
   };
+}
+
+async function searchAllIssues(jql, fields, maxIssues = 300) {
+  const PAGE_SIZE = 100;
+
+  const first = await searchIssues(jql, fields, 0, PAGE_SIZE);
+  const total = first.total;
+
+  const step  = first.maxResults || PAGE_SIZE;
+  const limit = Math.min(total, maxIssues);
+
+  const offsets = [];
+  for (let start = step; start < limit; start += step) offsets.push(start);
+
+  const rest = await Promise.all(
+    offsets.map(start => searchIssues(jql, fields, start, step))
+  );
+
+  const byKey = new Map();
+  for (const page of [first, ...rest]) {
+    for (const issue of page.issues) byKey.set(issue.key, issue);
+  }
+
+  const issues = Array.from(byKey.values()).slice(0, maxIssues);
+  return { issues, total, loaded: issues.length, truncated: issues.length < total };
 }
 
 async function searchUsers(query, maxResults = 50) {
@@ -104,4 +136,4 @@ class ConfigError extends Error {
   }
 }
 
-module.exports = { searchIssues, searchUsers, get, JiraError, ConfigError };
+module.exports = { searchIssues, searchAllIssues, searchUsers, get, JiraError, ConfigError };
