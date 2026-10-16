@@ -42,6 +42,7 @@ O sistema resolve um problema recorrente de atendimento: identificar rapidamente
   * Mudança de status em chamado atribuído.
   * Movimentação em chamado atribuído.
   * Encerramento de chamado atribuído.
+* **Tema claro/escuro** com botão no cabeçalho (☀️/🌙): segue a preferência do sistema até o usuário escolher e lembra a escolha.
 * Persistência de filtros via `localStorage`.
 * Badge no título da aba com contador de novidades não visualizadas.
 
@@ -157,6 +158,16 @@ Como parceiros e prestação de contas são filtrados *depois* do cache, alterna
 
 A cada ciclo de polling, `renderResults` compara uma *assinatura* dos dados exibidos (campos visíveis na tabela + flags dos banners) com a da última renderização. Se nada mudou, o DOM não é tocado. A assinatura é zerada sempre que a área de resultados é substituída por spinner, erro ou aviso, para que o próximo polling idêntico não deixe a tela presa nessa mensagem. Como a tabela deixa de ser refeita, os badges de "tempo na fila" (`data-iso`) são atualizados por um intervalo de 30s, que fica parado com a aba oculta e roda de novo ao voltar a ela.
 
+### Tema Claro/Escuro
+
+* **Só variáveis CSS:** as cores vivem em `:root` (tema claro) e são sobrescritas em `:root[data-theme="dark"]`. Nenhuma regra de componente conhece o tema. As cores que antes eram fixas no CSS e no JS viraram variáveis por finalidade (`--surface`, `--blue-text`, `--row-hover`, `--st-*-bg/fg` etc.), e no tema claro mantêm exatamente os valores antigos.
+* **Duas famílias de azul:** `--blue-primary` é cor de *preenchimento* (sempre com texto branco por cima); texto azul usa `--blue-text`, que clareia no escuro. `--white` continua branco nos dois temas (é o texto sobre preenchimentos coloridos); o fundo de cards e inputs é `--surface`.
+* **Sem "flash" branco:** um script no `<head>` define `data-theme` antes da primeira pintura. Ordem: escolha salva (`localStorage`, chave `tema`) > preferência do sistema > claro. Se o `localStorage` estiver bloqueado, a página funciona do mesmo jeito, sem lembrar a escolha.
+* **Segue o sistema até haver escolha manual:** quando o sistema muda de claro para escuro (por exemplo, modo automático à noite), a página acompanha, mas essa mudança não grava preferência. Depois que o usuário clica no botão, a escolha dele passa a valer.
+* **Status coloridos por classe:** as pílulas de status usam classes `.st-*` (cores em variáveis) em vez de cores inline.
+* **Controles nativos:** `color-scheme` faz scrollbars e listas de `<select>` acompanharem o tema.
+* Cores intencionalmente fixas nos dois temas: o badge Online/Offline, o texto `#fff` sobre preenchimentos e os botões dos banners.
+
 ---
 
 # Performance
@@ -173,52 +184,6 @@ Resumo das otimizações e onde cada uma vive:
 | Badges de tempo por intervalo | `public/index.html` | Tempo na fila continua correto sem re-render |
 | Worker sem `tick` por segundo + barra por CSS | `public/timer-worker.js`, `public/index.html` | De 60 mensagens por ciclo para 1; sem animação da barra feita em JavaScript |
 | Campo `created` removido das consultas | `api/chamados.js` | Menos dados por chamado (a tabela só exibe `updated`) |
-| `tipos.js` com `Cache-Control` | `api/tipos.js` | Lista de tipos cacheada pelo navegador/CDN |
-
-### Cache e Deduplicação no Servidor
-
-`api/chamados.js` guarda a *promise* de cada consulta ao Jira, indexada pelo JQL completo:
-
-* **Cache:** a mesma consulta dentro do TTL (30s por padrão) é respondida da memória.
-* **Deduplicação:** se várias pessoas pedirem a mesma consulta ao mesmo tempo, só uma chamada vai ao Jira.
-* **Falhas não são cacheadas:** um timeout ou 502 não "gruda" para os próximos usuários.
-* **Busca manual fura o cache:** o front envia `fresh=1` quando o usuário clica em buscar ou muda um filtro; o resultado novo realimenta o cache. O polling automático não envia `fresh` e aproveita o cache.
-* O cache vive na memória da instância serverless. Em instância fria ele começa vazio; isso nunca piora o comportamento, apenas deixa de ajudar.
-* O header de resposta `X-Cache: HIT|MISS` indica se a resposta veio do cache (útil na aba Network do navegador).
-
-### Paginação e Total Real
-
-`searchAllIssues` (em `api/_lib/jira.js`) busca a primeira página, descobre o `total` real do Jira e busca as demais em paralelo, respeitando um teto (`JIRA_MAX_ISSUES`, padrão 300) e o `maxResults` que o servidor realmente aplicou. A resposta de `/api/chamados` informa quantos chamados existem no Jira (`jiraTotal*`), quantos foram carregados (`loaded*`) e se a lista foi truncada (`truncated*`), e o front exibe o aviso de "Resultados incompletos". O `ORDER BY` tem `key ASC` como desempate para a paginação ser estável.
-
-### Quais Filtros Rodam no JQL e Quais no Node
-
-| Filtro | Onde roda | Motivo |
-| ------ | --------- | ------ |
-| Vertical, portfólio, equipe, período, responsável | JQL | Campos com valores exatos |
-| Tipos obsoletos ("NÃO USAR", "Pre-Condition"...) | JQL (por ID) + Node (rede de segurança) | IDs resolvidos via `/issuetype`; um nome inexistente no JQL derrubaria a consulta inteira com HTTP 400 |
-| Parceiros (`security`) | Node | O JQL só compara o nível de segurança por nome exato e não existe "contém" |
-| Prestação de contas (`customfield_10335`) | Node | A regra é "texto contém rótulo"; o operador `~` do JQL é busca de texto tokenizada, com semântica diferente, e poderia esconder chamados válidos |
-
-Como parceiros e prestação de contas são filtrados *depois* do cache, alternar esses filtros não gera nova consulta ao Jira.
-
-### Renderização Incremental no Front
-
-A cada ciclo de polling, `renderResults` compara uma *assinatura* dos dados exibidos (campos visíveis na tabela + flags dos banners) com a da última renderização. Se nada mudou, o DOM não é tocado. A assinatura é zerada sempre que a área de resultados é substituída por spinner, erro ou aviso, para que o próximo polling idêntico não deixe a tela presa nessa mensagem. Como a tabela deixa de ser refeita, os badges de "tempo na fila" (`data-iso`) são atualizados por um intervalo de 30s, que fica parado com a aba oculta e roda de novo ao voltar a ela.
-
----
-
-# Performance
-
-Resumo das otimizações e onde cada uma vive:
-
-| Otimização | Arquivo | Efeito |
-| ---------- | ------- | ------ |
-| Cache + deduplicação de consultas (TTL 30s) | `api/chamados.js` | Menos chamadas ao Jira com vários analistas usando os mesmos filtros |
-| Cache da lista de tipos excluídos (1h) | `api/chamados.js` | 1 chamada a `/issuetype` por hora, não por busca |
-| Paginação paralela com teto | `api/_lib/jira.js` | Carrega mais de 100 chamados sem requisições sequenciais |
-| Tipos obsoletos filtrados no JQL | `api/chamados.js` | O limite de resultados não é gasto com chamados descartados depois |
-| Render pulado quando nada mudou | `public/index.html` | Sem reconstruir as tabelas a cada 60s |
-| Badges de tempo por intervalo | `public/index.html` | Tempo na fila continua correto sem re-render |
 | `tipos.js` com `Cache-Control` | `api/tipos.js` | Lista de tipos cacheada pelo navegador/CDN |
 
 ---
@@ -439,7 +404,7 @@ Quando `truncated` é `true`, o front exibe o banner "Resultados incompletos" e 
 | 400    | INVALID_FILTER     | Tipo inexistente    |
 | 405    | METHOD_NOT_ALLOWED | Método inválido     |
 | 500    | CONFIG_ERROR       | Variáveis ausentes  |
-| 502    | JIRA_ERROR         | Erro Jira           |
+| 502    | JIRA_ERROR         | Erro Jira ou falha de rede ao consultá-lo (o motivo vai para o log do servidor) |
 | 504    | TIMEOUT            | Timeout da consulta |
 
 ---
@@ -611,7 +576,7 @@ O arquivo precisa ser executado a partir da raiz do projeto: ele carrega `api/ch
 
 O runner é assíncrono: `test()` enfileira e `main()` executa em sequência, aguardando cada teste.
 
-## Cobertura (121 testes)
+## Cobertura (145 testes)
 
 **Lógica espelhada do front**
 
@@ -637,6 +602,7 @@ O runner é assíncrono: `test()` enfileira e `main()` executa em sequência, ag
 * JQL: tipos obsoletos por ID (só os existentes), `typeIds` explícito, `ORDER BY ... key ASC`, cache da lista de tipos, fallback quando `/issuetype` falha
 * Filtros pós-cache: parceiros e prestação de contas sem nova consulta
 * Erros da API: 405, 400 `INVALID_PARAMS`, 400 `INVALID_FILTER`, 502 `JIRA_ERROR`
+* Falhas de rede com o Jira: viram 502 `JIRA_ERROR` (inclusive em uma das páginas paralelas, sem ficar em cache), timeout continua 504 `TIMEOUT` e o log traz o código real da falha (`err.cause`)
 * Payload: `created` não é pedido ao Jira nem devolvido
 * Lista única de tipos excluídos: módulo compartilhado, ausência de cópias em `tipos.js`/`chamados.js`, `tipos.js` real (exclusão, agrupamento, ordenação, `Cache-Control`) e coerência entre o que o seletor esconde e o que as consultas excluem
 
@@ -646,6 +612,15 @@ O runner é assíncrono: `test()` enfileira e `main()` executa em sequência, ag
 * Portão de renderização: polling idêntico não redesenha, dado alterado redesenha, busca manual e ordenação sempre redesenham, invalidação após spinner/erro/aviso
 * Tempo na fila: faixas `ok`/`avg`/`bad`, data futura, `data-iso`, escape de XSS, evolução do texto ao longo do tempo
 * Contagem regressiva: `segundosRestantes` (arredondamento e piso em zero); a página não trata mais `tick` e a transição da barra acompanha `REFRESH_INTERVAL`
+
+**Tema claro/escuro (`public/index.html`)**
+
+* Estático: o bloco escuro só usa variáveis que existem no claro; toda cor do claro tem versão escura (exceto `--white` e `--orange`); o tema claro mantém os valores antigos
+* Contraste WCAG AA (>= 4,5:1) calculado para os pares texto/fundo do tema escuro, incluindo as pílulas de status
+* Nenhuma cor fixa "esquecida" no CSS ou no JavaScript (só as permitidas)
+* Script do `<head>` executado em sandbox: escolha salva, preferência do sistema, valor inválido e `localStorage` bloqueado
+* Botão de alternância: troca, persistência, ícone/título/`aria-label`, mudança vinda do sistema sem gravar escolha e `localStorage` bloqueado
+* Pílulas de status: classe por status, sem estilo inline, escape de XSS e regras/variáveis nos dois temas
 
 **Worker de polling real (`public/timer-worker.js`)**
 
@@ -712,17 +687,6 @@ var REFRESH_INTERVAL = 60; // segundos
 ```
 
 O `public/timer-worker.js` não tem constante de intervalo: a página envia o prazo absoluto (`endAt`) a cada ciclo, e a barra de progresso e o rótulo usam o mesmo `REFRESH_INTERVAL`, então basta alterar essa constante.
-
-> Com o cache de 30s no servidor, intervalos de polling menores que o TTL fazem a maioria das consultas automáticas serem respondidas do cache.
-
----
-
-## Ajustar Cache e Limite de Chamados
-
-* **TTL do cache:** variável `CHAMADOS_CACHE_TTL_MS` (padrão 30000 ms). Valores maiores reduzem a carga no Jira, mas deixam o polling mais defasado; a busca manual sempre ignora o cache.
-* **Teto de chamados por lista:** variável `JIRA_MAX_ISSUES` (padrão 300). Aumentar carrega mais chamados, com respostas maiores e mais páginas por consulta.
-* **Quantidade de entradas do cache:** constante `CACHE_MAX_ENTRIES` em `api/chamados.js` (padrão 100).
-* **Intervalo de atualização dos badges de tempo na fila:** `setInterval(atualizarTempoFila, 30000)` em `public/index.html`.
 
 > Com o cache de 30s no servidor, intervalos de polling menores que o TTL fazem a maioria das consultas automáticas serem respondidas do cache.
 

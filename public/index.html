@@ -4,6 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('tema'); } catch (e) { }
+      if (t !== 'dark' && t !== 'light') {
+        t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <title>Chamados por Vertical — Betha Sistemas</title>
   <link rel="icon" type="image/x-icon" href="favicon.svg">
   <style>
@@ -29,6 +39,70 @@
       --shadow-md: 0 4px 16px rgba(0, 63, 138, .13);
       --radius: 12px;
       --radius-sm: 8px;
+
+      --surface: #FFFFFF;
+      --header-bg: #003F8A;
+      --blue-text: #003F8A;
+      --row-border: #F3F5FA;
+      --row-hover: #F8FAFF;
+      --th-hover: #EAECF2;
+      --neutral-bg: #F3F4F6;
+      --yellow-text: #7B5800;
+      --help-bg: #E0E0E0;
+      --help-fg: #555555;
+      --tooltip-bg: #333333;
+      --ok-bg: #E8F5E9;   --ok-fg: #2E7D32;
+      --avg-bg: #FFF3E0;  --avg-fg: #E65100;
+      --st-amarelo-bg: #FFF8E1;   --st-amarelo-fg: #7B5800;
+      --st-azul-bg: #E3F2FD;      --st-azul-fg: #1565C0;
+      --st-verde-bg: #E8F5E9;     --st-verde-fg: #2E7D32;
+      --st-cinza-bg: #F3F4F6;     --st-cinza-fg: #5A6680;
+      --st-roxo-bg: #EDE9FE;      --st-roxo-fg: #4527A0;
+      --st-vermelho-bg: #FFEBEE;  --st-vermelho-fg: #C62828;
+      --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      color-scheme: light;
+    }
+
+    :root[data-theme="dark"] {
+      --blue-primary: #2F6FD0;
+      --blue-dark: #0C2247;
+      --blue-light: #1C2C4D;
+      --blue-mid: #7AB0FF;
+      --orange-light: #3A2B1A;
+      --orange-dark: #FFB070;
+      --gray-bg: #0E1320;
+      --gray-border: #2A3552;
+      --text-primary: #E8ECF6;
+      --text-secondary: #A0ABC6;
+      --green: #7BD389;
+      --green-light: #16301E;
+      --red: #FF9C9C;
+      --red-light: #3A1E22;
+      --yellow-light: #352B10;
+      --shadow-sm: 0 1px 4px rgba(0, 0, 0, .35);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, .5);
+
+      --surface: #172033;
+      --header-bg: #0E2A57;
+      --blue-text: #8DB8FF;
+      --row-border: #212B44;
+      --row-hover: #1D2840;
+      --th-hover: #26324F;
+      --neutral-bg: #232C42;
+      --yellow-text: #FFD667;
+      --help-bg: #2A3552;
+      --help-fg: #C5CEE6;
+      --tooltip-bg: #0A0E19;
+      --ok-bg: #16301E;   --ok-fg: #7BD389;
+      --avg-bg: #3A2B1A;  --avg-fg: #FFB070;
+      --st-amarelo-bg: #352B10;   --st-amarelo-fg: #FFD667;
+      --st-azul-bg: #172A47;      --st-azul-fg: #8DB8FF;
+      --st-verde-bg: #16301E;     --st-verde-fg: #7BD389;
+      --st-cinza-bg: #232C42;     --st-cinza-fg: #A0ABC6;
+      --st-roxo-bg: #2A2250;      --st-roxo-fg: #B9A8FF;
+      --st-vermelho-bg: #3A1E22;  --st-vermelho-fg: #FF9C9C;
+      --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23A0ABC6' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      color-scheme: dark;
     }
 
     *,
@@ -47,7 +121,7 @@
     }
 
     header {
-      background: var(--blue-primary);
+      background: var(--header-bg);
       color: var(--white);
       padding: 0 24px;
       height: 60px;
@@ -124,6 +198,23 @@
       white-space: nowrap;
     }
 
+    .theme-btn {
+      background: none;
+      border: 1.5px solid rgba(255, 255, 255, .35);
+      border-radius: 99px;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      padding: 3px 9px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+
+    .theme-btn:hover {
+      background: rgba(255, 255, 255, .12);
+      border-color: rgba(255, 255, 255, .7);
+    }
+
     .notif-btn:hover {
       background: rgba(255, 255, 255, .12);
       border-color: rgba(255, 255, 255, .7);
@@ -191,7 +282,7 @@
     }
 
     .filter-card {
-      background: var(--white);
+      background: var(--surface);
       border-radius: var(--radius);
       border: 1.5px solid var(--gray-border);
       box-shadow: var(--shadow-sm);
@@ -202,7 +293,7 @@
     .filter-card h2 {
       font-size: 15px;
       font-weight: 700;
-      color: var(--blue-primary);
+      color: var(--blue-text);
       margin-bottom: 16px;
       display: flex;
       align-items: center;
@@ -267,13 +358,13 @@
       padding: 9px 10px;
       font-size: 13px;
       color: var(--text-primary);
-      background: var(--white);
+      background: var(--surface);
       outline: none;
       transition: border-color .15s;
       width: 100%;
       appearance: none;
       -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-image: var(--select-arrow);
       background-repeat: no-repeat;
       background-position-x: right;
       background-position-y: center;
@@ -296,6 +387,8 @@
       padding: 6px 25px;
       font-size: 12px;
       outline: none;
+      background-color: var(--surface);
+      color: var(--text-primary);
     }
 
     .form-group select:hover,
@@ -325,7 +418,7 @@
       top: calc(100% + 4px);
       left: 0;
       right: 0;
-      background: var(--white);
+      background: var(--surface);
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
       box-shadow: var(--shadow-md);
@@ -371,7 +464,7 @@
     }
 
     .chip {
-      background: var(--white);
+      background: var(--surface);
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
       padding: 8px 16px;
@@ -385,7 +478,7 @@
     .chip-num {
       font-size: 20px;
       font-weight: 800;
-      color: var(--blue-primary);
+      color: var(--blue-text);
     }
 
     .chip-label {
@@ -403,7 +496,7 @@
     }
 
     .section {
-      background: var(--white);
+      background: var(--surface);
       border-radius: var(--radius);
       border: 1.5px solid var(--gray-border);
       box-shadow: var(--shadow-sm);
@@ -437,12 +530,12 @@
 
     .tag-warning {
       background: var(--yellow-light);
-      color: #7B5800;
+      color: var(--yellow-text);
     }
 
     .tag-blue {
       background: var(--blue-light);
-      color: var(--blue-primary);
+      color: var(--blue-text);
     }
 
     .table-wrap {
@@ -470,7 +563,7 @@
 
     tbody td {
       padding: 11px 14px;
-      border-bottom: 1px solid #F3F5FA;
+      border-bottom: 1px solid var(--row-border);
       vertical-align: middle;
     }
 
@@ -479,7 +572,7 @@
     }
 
     tbody tr:hover td {
-      background: #F8FAFF;
+      background: var(--row-hover);
     }
 
     .key-link {
@@ -499,7 +592,7 @@
     }
 
     thead th.sortable:hover {
-      background: #eaecf2;
+      background: var(--th-hover);
     }
 
     thead th.sort-asc::after {
@@ -519,7 +612,7 @@
       padding: 8px 14px;
       margin-bottom: 12px;
       font-size: 12px;
-      color: var(--blue-primary);
+      color: var(--blue-text);
       font-weight: 600;
     }
 
@@ -549,18 +642,25 @@
 
     .pri-2 {
       background: var(--yellow-light);
-      color: #7B5800;
+      color: var(--yellow-text);
     }
 
     .pri-3 {
-      background: #F3F4F6;
+      background: var(--neutral-bg);
       color: var(--text-secondary);
     }
 
     .pri-4 {
-      background: #F3F4F6;
+      background: var(--neutral-bg);
       color: var(--text-secondary);
     }
+
+    .st-amarelo { background: var(--st-amarelo-bg); color: var(--st-amarelo-fg); }
+    .st-azul { background: var(--st-azul-bg); color: var(--st-azul-fg); }
+    .st-verde { background: var(--st-verde-bg); color: var(--st-verde-fg); }
+    .st-cinza { background: var(--st-cinza-bg); color: var(--st-cinza-fg); }
+    .st-roxo { background: var(--st-roxo-bg); color: var(--st-roxo-fg); }
+    .st-vermelho { background: var(--st-vermelho-bg); color: var(--st-vermelho-fg); }
 
     .status-pill {
       display: inline-block;
@@ -674,7 +774,7 @@
       padding: 9px 20px;
       font-size: 13px;
       color: var(--text-primary);
-      background: var(--white);
+      background: var(--surface);
       cursor: pointer;
       text-align: left;
       display: flex;
@@ -683,7 +783,7 @@
       transition: border-color .15s;
       appearance: none;
       -webkit-appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23333' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-image: var(--select-arrow);
       background-repeat: no-repeat;
       background-position-x: right;
       background-position-y: center;
@@ -709,7 +809,7 @@
       top: calc(100% + 4px);
       left: 0;
       right: 0;
-      background: var(--white);
+      background: var(--surface);
       border: 1.5px solid var(--gray-border);
       border-radius: var(--radius-sm);
       box-shadow: var(--shadow-md);
@@ -800,8 +900,8 @@
       height: 16px;
       padding-bottom: 2px;
       border-radius: 50%;
-      background-color: #e0e0e0;
-      color: #555;
+      background-color: var(--help-bg);
+      color: var(--help-fg);
       font-size: 11px;
       font-weight: bold;
       cursor: help;
@@ -813,7 +913,7 @@
       width: 240px;
       white-space: normal;
       word-break: break-word;
-      background-color: #333;
+      background-color: var(--tooltip-bg);
       color: #fff;
       text-align: left;
       border-radius: 6px;
@@ -848,7 +948,7 @@
       cursor: text;
       min-height: 40px;
       transition: border-color .15s;
-      background: var(--white);
+      background: var(--surface);
     }
 
     .user-tags-wrap:focus-within {
@@ -868,7 +968,7 @@
 
     .user-tag {
       background: var(--blue-light);
-      color: var(--blue-primary);
+      color: var(--blue-text);
       border-radius: 4px;
       padding: 2px 6px 2px 8px;
       font-size: 12px;
@@ -901,13 +1001,13 @@
     }
 
     .tempo-fila.ok {
-      background: #E8F5E9;
-      color: #2E7D32;
+      background: var(--ok-bg);
+      color: var(--ok-fg);
     }
 
     .tempo-fila.avg {
-      background: #FFF3E0;
-      color: #E65100;
+      background: var(--avg-bg);
+      color: var(--avg-fg);
     }
 
     .tempo-fila.bad {
@@ -927,7 +1027,7 @@
     }
 
     #notif-guide-box {
-      background: var(--white);
+      background: var(--surface);
       border: 1px solid var(--gray-border);
       border-radius: 12px;
       padding: 20px;
@@ -1002,6 +1102,7 @@
     </div>
     <div class="header-right">
       <button class="notif-btn" id="notif-btn" onclick="clicarNotifBtn()" style="display:none" title=""></button>
+      <button class="theme-btn" id="theme-btn" onclick="alternarTema()" type="button"></button>
       <span class="status-badge" id="status-badge">Online</span>
     </div>
   </header>
@@ -1249,6 +1350,39 @@
         .replace(/'/g, '&#39;');
     }
 
+    function temaAtual() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+
+    function atualizarBotaoTema() {
+      var btn = document.getElementById('theme-btn');
+      if (!btn) return;
+      var escuro = temaAtual() === 'dark';
+      btn.textContent = escuro ? '☀️' : '🌙';
+      btn.title = escuro ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+      btn.setAttribute('aria-label', btn.title);
+    }
+
+    function aplicarTema(tema, salvar) {
+      document.documentElement.setAttribute('data-theme', tema);
+      if (salvar) { try { localStorage.setItem('tema', tema); } catch (e) { } }
+      atualizarBotaoTema();
+    }
+
+    function alternarTema() {
+      aplicarTema(temaAtual() === 'dark' ? 'light' : 'dark', true);
+    }
+
+    atualizarBotaoTema();
+
+    if (window.matchMedia) {
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+        var salvo = null;
+        try { salvo = localStorage.getItem('tema'); } catch (err) { }
+        if (salvo !== 'dark' && salvo !== 'light') aplicarTema(e.matches ? 'dark' : 'light', false);
+      });
+    }
+
     function setBadge(online) {
       var badge = document.getElementById('status-badge');
       badge.textContent = online ? 'Online' : 'Offline';
@@ -1307,7 +1441,7 @@
     }
 
     function fetchUsuarios(q) {
-      inpUser.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\' stroke=\'%23003F8A\' stroke-width=\'3\' fill=\'none\' stroke-dasharray=\'31.4\' stroke-dashoffset=\'10\'%3E%3CanimateTransform attributeName=\'transform\' type=\'rotate\' from=\'0 12 12\' to=\'360 12 12\' dur=\'0.7s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E")';
+      inpUser.style.backgroundImage = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'10\' stroke=\'%232F6FD0\' stroke-width=\'3\' fill=\'none\' stroke-dasharray=\'31.4\' stroke-dashoffset=\'10\'%3E%3CanimateTransform attributeName=\'transform\' type=\'rotate\' from=\'0 12 12\' to=\'360 12 12\' dur=\'0.7s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E")';
       inpUser.style.backgroundRepeat = 'no-repeat';
       inpUser.style.backgroundPosition = 'right 10px center';
       fetch('/api/usuarios?q=' + encodeURIComponent(q))
@@ -1815,32 +1949,20 @@
       if (e.key === 'Enter' && !acList.classList.contains('open')) buscar();
     });
 
-    var STATUS_BG = {
-      'Aguardando Manutencao': '#FFF8E1',
-      'Aguardando Manutenção': '#FFF8E1',
-      'Aguardando aprovacao do solicitante': '#E3F2FD',
-      'Aguardando aprovação do solicitante': '#E3F2FD',
-      'Em andamento': '#E8F5E9',
-      'Nao iniciada': '#F3F4F6',
-      'Não iniciada': '#F3F4F6',
-      'Aberto': '#EDE9FE',
-      'Reaberto': '#FFEBEE'
-    };
-
-    var STATUS_COLOR = {
-      'Aguardando Manutencao': '#7B5800',
-      'Aguardando Manutenção': '#7B5800',
-      'Aguardando aprovacao do solicitante': '#1565C0',
-      'Aguardando aprovação do solicitante': '#1565C0',
-      'Em andamento': '#2E7D32',
-      'Nao iniciada': '#5A6680',
-      'Não iniciada': '#5A6680',
-      'Aberto': '#4527A0',
-      'Reaberto': '#C62828'
+    var STATUS_CLASSE = {
+      'Aguardando Manutencao': 'amarelo',
+      'Aguardando Manutenção': 'amarelo',
+      'Aguardando aprovacao do solicitante': 'azul',
+      'Aguardando aprovação do solicitante': 'azul',
+      'Em andamento': 'verde',
+      'Nao iniciada': 'cinza',
+      'Não iniciada': 'cinza',
+      'Aberto': 'roxo',
+      'Reaberto': 'vermelho'
     };
 
     function statusPill(s) {
-      return '<span class="status-pill" style="background:' + (STATUS_BG[s] || '#F3F4F6') + ';color:' + (STATUS_COLOR[s] || '#5A6680') + '">' + escHtml(s) + '</span>';
+      return '<span class="status-pill st-' + (STATUS_CLASSE[s] || 'cinza') + '">' + escHtml(s) + '</span>';
     }
 
     function priBadge(p) {
@@ -2435,8 +2557,8 @@
 
     var BANNER_STYLES = {
       warning: { bg: 'var(--orange-light)', border: 'var(--orange)', color: 'var(--orange-dark)', btn: 'var(--orange)' },
-      info: { bg: 'var(--blue-light)', border: 'var(--blue-mid)', color: 'var(--blue-primary)', btn: 'var(--blue-mid)' },
-      success: { bg: 'var(--green-light)', border: 'var(--green)', color: 'var(--green)', btn: 'var(--green)' },
+      info: { bg: 'var(--blue-light)', border: 'var(--blue-mid)', color: 'var(--blue-text)', btn: '#1565C0' },
+      success: { bg: 'var(--green-light)', border: 'var(--green)', color: 'var(--green)', btn: '#2E7D32' },
     };
 
     function exibirBanner(html, tipo) {

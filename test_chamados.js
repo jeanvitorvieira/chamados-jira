@@ -1581,6 +1581,232 @@ test('Front: a página não depende mais de "tick" do worker nem de transição 
   assert(/cmd:\s*'start',\s*endAt:/.test(HTML_SRC), 'a página deve enviar o prazo absoluto (endAt) ao worker');
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Tema claro/escuro (public/index.html)
+//
+// Sem navegador no CI, o tema é protegido por testes ESTÁTICOS e por execução
+// das funções reais em sandbox: contraste WCAG calculado, cobertura de variáveis,
+// ausência de cores fixas "esquecidas", script do <head> e botão de alternância.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const CSS_SRC = HTML_SRC.slice(HTML_SRC.indexOf('<style>'), HTML_SRC.indexOf('</style>')).replace(/\r\n/g, '\n');
+
+function cssBlock(sel) {
+  const i = CSS_SRC.indexOf(sel);
+  if (i < 0) throw new Error('Bloco CSS não encontrado: ' + sel);
+  return CSS_SRC.slice(i, CSS_SRC.indexOf('\n    }\n', i));
+}
+function parseHexVars(bloco) {
+  const out = {};
+  for (const m of bloco.matchAll(/(--[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)) out[m[1]] = m[2].toUpperCase();
+  return out;
+}
+const TEMA_CLARO  = parseHexVars(cssBlock(':root {'));
+const TEMA_ESCURO = Object.assign({}, TEMA_CLARO, parseHexVars(cssBlock(':root[data-theme="dark"]')));
+
+function luminancia(hex) {
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(c => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contraste(a, b) {
+  const [x, y] = [luminancia(a), luminancia(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+
+test('Tema: o bloco escuro só sobrescreve variáveis que existem no tema claro (sem typos)', () => {
+  const claro = Object.keys(parseHexVars(cssBlock(':root {')));
+  const escuro = Object.keys(parseHexVars(cssBlock(':root[data-theme="dark"]')));
+  const desconhecidas = escuro.filter(v => !claro.includes(v));
+  deepEq(desconhecidas, [], 'variáveis só no escuro (provável erro de digitação)');
+});
+
+test('Tema: toda cor do tema claro tem versão escura (exceto --white e --orange, intencionais)', () => {
+  const claro = Object.keys(parseHexVars(cssBlock(':root {')));
+  const escuro = Object.keys(parseHexVars(cssBlock(':root[data-theme="dark"]')));
+  const semVersaoEscura = claro.filter(v => !escuro.includes(v)).sort();
+  deepEq(semVersaoEscura, ['--orange', '--white'], 'cores sem versão escura');
+});
+
+test('Tema: --white continua branco no escuro (é texto sobre preenchimentos coloridos)', () => {
+  eq(TEMA_ESCURO['--white'], '#FFFFFF');
+});
+
+test('Tema claro: cores que viraram variável mantêm exatamente os valores antigos', () => {
+  const antigos = {
+    '--surface': '#FFFFFF', '--header-bg': '#003F8A', '--blue-text': '#003F8A', '--row-border': '#F3F5FA',
+    '--row-hover': '#F8FAFF', '--th-hover': '#EAECF2', '--neutral-bg': '#F3F4F6', '--yellow-text': '#7B5800',
+    '--st-amarelo-bg': '#FFF8E1', '--st-azul-fg': '#1565C0', '--st-roxo-fg': '#4527A0', '--avg-fg': '#E65100',
+  };
+  Object.keys(antigos).forEach(k => eq(TEMA_CLARO[k], antigos[k], k));
+});
+
+test('Tema escuro: todo texto tem contraste WCAG AA (>= 4,5:1) sobre o fundo em que aparece', () => {
+  const pares = [
+    ['--text-primary', '--surface'], ['--text-primary', '--gray-bg'], ['--text-primary', '--row-hover'],
+    ['--text-secondary', '--surface'], ['--text-secondary', '--gray-bg'], ['--text-secondary', '--row-hover'],
+    ['--blue-text', '--surface'], ['--blue-text', '--blue-light'], ['--blue-mid', '--surface'], ['--blue-mid', '--blue-light'],
+    ['--orange-dark', '--orange-light'], ['--green', '--green-light'], ['--green', '--surface'],
+    ['--red', '--surface'], ['--red', '--red-light'], ['--yellow-text', '--yellow-light'],
+    ['--ok-fg', '--ok-bg'], ['--avg-fg', '--avg-bg'], ['--help-fg', '--help-bg'],
+    ['--white', '--blue-primary'], ['--white', '--header-bg'], ['--white', '--tooltip-bg'],
+    ...['amarelo', 'azul', 'verde', 'cinza', 'roxo', 'vermelho'].map(n => ['--st-' + n + '-fg', '--st-' + n + '-bg']),
+  ];
+  const ruins = pares
+    .map(([fg, bg]) => ({ fg, bg, c: contraste(TEMA_ESCURO[fg], TEMA_ESCURO[bg]) }))
+    .filter(x => x.c < 4.5)
+    .map(x => `${x.fg}/${x.bg}=${x.c.toFixed(2)}`);
+  deepEq(ruins, [], 'pares com contraste insuficiente');
+});
+
+test('Tema: nenhuma cor fixa "esquecida" no CSS fora das variáveis (permitidas: #fff, Online/Offline)', () => {
+  const semBlocos = CSS_SRC.replace(cssBlock(':root {'), '').replace(cssBlock(':root[data-theme="dark"]'), '');
+  const hex = new Set((semBlocos.match(/#[0-9a-fA-F]{3,6}\b/g) || []).map(h => h.toLowerCase()));
+  const permitidas = new Set(['#fff', '#00c851', '#e53935']);
+  const esquecidas = [...hex].filter(h => !permitidas.has(h));
+  deepEq(esquecidas, [], 'cores fixas que não mudam com o tema');
+});
+
+test('Tema: nenhuma cor fixa "esquecida" no JavaScript (permitidas: badge Online/Offline e botões dos banners)', () => {
+  const js = HTML_SRC.slice(HTML_SRC.lastIndexOf('<script>'));
+  const hex = new Set((js.match(/#[0-9a-fA-F]{3,6}\b/g) || []).map(h => h.toLowerCase()));
+  const permitidas = new Set(['#fff', '#00c851', '#e53935', '#1565c0', '#2e7d32']);
+  deepEq([...hex].filter(h => !permitidas.has(h)), [], 'cores fixas no JS');
+});
+
+test('Tema: a seta dos selects é variável e tem versão clara e escura', () => {
+  assert(!/background-image:\s*url\("data:image\/svg\+xml[^"]*%23333/.test(CSS_SRC.replace(cssBlock(':root {'), '')),
+    'seta fixa escura fora das variáveis');
+  assert(cssBlock(':root[data-theme="dark"]').includes('--select-arrow'), 'sem seta clara no escuro');
+});
+
+test('Tema: o fundo "surface" substituiu o branco fixo e o cabeçalho usa --header-bg', () => {
+  const semBlocos = CSS_SRC.replace(cssBlock(':root {'), '');
+  assert(!/background:\s*var\(--white\)/.test(semBlocos), 'ainda há background: var(--white)');
+  assert(/header\s*\{\s*background:\s*var\(--header-bg\)/.test(CSS_SRC), 'cabeçalho sem --header-bg');
+});
+
+// ── Script do <head> (aplica o tema antes da primeira pintura) ──────────────
+
+const HEAD_SCRIPT = HTML_SRC.match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/)[1];
+
+function temaInicial({ salvo, sistemaEscuro, storageQuebrado } = {}) {
+  const attrs = {};
+  const ctx = {
+    window: { matchMedia: () => ({ matches: !!sistemaEscuro }) },
+    matchMedia: () => ({ matches: !!sistemaEscuro }),
+    localStorage: { getItem: () => { if (storageQuebrado) throw new Error('bloqueado'); return salvo === undefined ? null : salvo; } },
+    document: { documentElement: { setAttribute: (k, v) => { attrs[k] = v; } } },
+  };
+  vm.runInNewContext(HEAD_SCRIPT, ctx);
+  return attrs['data-theme'];
+}
+
+test('Tema inicial: escolha salva vence a preferência do sistema', () => {
+  eq(temaInicial({ salvo: 'light', sistemaEscuro: true }), 'light');
+  eq(temaInicial({ salvo: 'dark', sistemaEscuro: false }), 'dark');
+});
+
+test('Tema inicial: sem escolha salva, segue o sistema', () => {
+  eq(temaInicial({ sistemaEscuro: true }), 'dark');
+  eq(temaInicial({ sistemaEscuro: false }), 'light');
+});
+
+test('Tema inicial: valor salvo inválido é ignorado (cai no sistema)', () => {
+  eq(temaInicial({ salvo: 'azul', sistemaEscuro: true }), 'dark');
+  eq(temaInicial({ salvo: '', sistemaEscuro: false }), 'light');
+});
+
+test('Tema inicial: localStorage bloqueado (navegação privada) não quebra a página', () => {
+  eq(temaInicial({ storageQuebrado: true, sistemaEscuro: true }), 'dark');
+  eq(temaInicial({ storageQuebrado: true, sistemaEscuro: false }), 'light');
+});
+
+// ── Botão de alternância ────────────────────────────────────────────────────
+
+function ambienteTema(inicial, { storageQuebrado } = {}) {
+  const attrs = { 'data-theme': inicial };
+  const store = {};
+  const btn = { textContent: '', title: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
+  const document = {
+    documentElement: { getAttribute: k => (k in attrs ? attrs[k] : null), setAttribute: (k, v) => { attrs[k] = v; } },
+    getElementById: id => (id === 'theme-btn' ? btn : null),
+  };
+  const localStorage = {
+    getItem: k => (k in store ? store[k] : null),
+    setItem: (k, v) => { if (storageQuebrado) throw new Error('cota excedida'); store[k] = v; },
+  };
+  const nomes = ['temaAtual', 'atualizarBotaoTema', 'aplicarTema', 'alternarTema'];
+  const fns = new Function('document', 'localStorage',
+    nomes.map(n => extractFunction(HTML_SRC, n)).join('\n') + '\nreturn { ' + nomes.join(', ') + ' };')(document, localStorage);
+  return { fns, attrs, store, btn };
+}
+
+test('Alternar tema: claro -> escuro salva a escolha e troca ícone e título do botão', () => {
+  const a = ambienteTema('light');
+  a.fns.atualizarBotaoTema();
+  eq(a.btn.textContent, '🌙');
+  a.fns.alternarTema();
+  eq(a.attrs['data-theme'], 'dark');
+  eq(a.store.tema, 'dark', 'a escolha deve persistir');
+  eq(a.btn.textContent, '☀️');
+  assert(/claro/.test(a.btn.title), 'título deve oferecer o tema claro: ' + a.btn.title);
+  eq(a.btn.attrs['aria-label'], a.btn.title, 'acessibilidade');
+});
+
+test('Alternar tema: duas trocas voltam ao tema original', () => {
+  const a = ambienteTema('dark');
+  a.fns.alternarTema(); eq(a.attrs['data-theme'], 'light');
+  a.fns.alternarTema(); eq(a.attrs['data-theme'], 'dark');
+  eq(a.store.tema, 'dark');
+});
+
+test('Alternar tema: mudança vinda do sistema (salvar=false) NÃO grava a escolha', () => {
+  const a = ambienteTema('light');
+  a.fns.aplicarTema('dark', false);
+  eq(a.attrs['data-theme'], 'dark');
+  assert(!('tema' in a.store), 'não deve sobrescrever a ausência de escolha do usuário');
+});
+
+test('Alternar tema: localStorage cheio/bloqueado não impede a troca', () => {
+  const a = ambienteTema('light', { storageQuebrado: true });
+  noThrow(() => a.fns.alternarTema(), 'alternarTema não pode lançar');
+  eq(a.attrs['data-theme'], 'dark');
+});
+
+// ── Pílulas de status (antes tinham cores hexadecimais inline) ──────────────
+
+const STATUS_MAP_SRC = HTML_SRC.match(/var STATUS_CLASSE = \{[\s\S]*?\};/)[0];
+const statusPill = new Function('escHtml', STATUS_MAP_SRC + '\n' + extractFunction(HTML_SRC, 'statusPill') + '\nreturn statusPill;')(FRONT.escHtml);
+
+test('Status: cada status usa uma classe .st-* (sem estilo inline), com cinza como padrão', () => {
+  const casos = {
+    'Aberto': 'roxo', 'Reaberto': 'vermelho', 'Em andamento': 'verde', 'Não iniciada': 'cinza',
+    'Aguardando Manutenção': 'amarelo', 'Aguardando aprovação do solicitante': 'azul',
+    'Status que não existe': 'cinza',
+  };
+  Object.keys(casos).forEach(s => {
+    const h = statusPill(s);
+    assert(h.includes('class="status-pill st-' + casos[s] + '"'), s + ' -> ' + h);
+    assert(!h.includes('style='), 'não deve ter cor inline: ' + h);
+  });
+});
+
+test('Status: o nome do status é escapado (XSS)', () => {
+  assert(!statusPill('<img src=x onerror=1>').includes('<img'), 'status sem escape');
+});
+
+test('Status: toda classe .st-* usada tem regra CSS e variáveis nos DOIS temas', () => {
+  const usadas = new Set(['cinza', ...[...STATUS_MAP_SRC.matchAll(/:\s*'(\w+)'/g)].map(m => m[1])]);
+  usadas.forEach(n => {
+    assert(CSS_SRC.includes('.st-' + n + ' {'), 'sem regra .st-' + n);
+    ['-bg', '-fg'].forEach(suf => {
+      assert(('--st-' + n + suf) in parseHexVars(cssBlock(':root {')), 'claro sem --st-' + n + suf);
+      assert(('--st-' + n + suf) in parseHexVars(cssBlock(':root[data-theme="dark"]')), 'escuro sem --st-' + n + suf);
+    });
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Execução
 // ─────────────────────────────────────────────────────────────────────────────
