@@ -1,47 +1,52 @@
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const vm = require('vm');
+const vm   = require('vm');
 
 let passed = 0, failed = 0;
 const results = [];
 
-function test(name, fn) {
-  try {
-    fn();
-    results.push({ ok: true, name });
-    passed++;
-  } catch (e) {
-    results.push({ ok: false, name, err: e.message });
-    failed++;
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Harness
+//
+// `test()` agora apenas ENFILEIRA o teste e `main()` (no final do arquivo) os
+// executa em sequência, aguardando cada um. Isso permite testes assíncronos
+// (handlers da API com Jira simulado) sem quebrar os testes síncronos antigos.
+// ─────────────────────────────────────────────────────────────────────────────
+const queue = [];
+function test(name, fn) { queue.push({ name, fn }); }
 
-function assert(cond, msg) { if (!cond) throw new Error(msg || 'A asserção falhou'); }
-function eq(a, b, msg) { if (a !== b) throw new Error((msg || '') + ` -> Esperado: ${JSON.stringify(b)} | Obtido: ${JSON.stringify(a)}`); }
-function deepEq(a, b, msg) { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg || '') + `\n  Esperado: ${JSON.stringify(b)}\n  Obtido: ${JSON.stringify(a)}`); }
-function noThrow(fn, msg) { try { fn(); } catch (e) { throw new Error((msg || '') + ': ' + e.message); } }
-function throws(fn, msg) { let ok = false; try { fn(); } catch { ok = true; } if (!ok) throw new Error(msg || 'Deveria ter lançado uma exceção'); }
+function assert(cond, msg)     { if (!cond) throw new Error(msg || 'A asserção falhou'); }
+function eq(a, b, msg)         { if (a !== b) throw new Error((msg||'') + ` -> Esperado: ${JSON.stringify(b)} | Obtido: ${JSON.stringify(a)}`); }
+function deepEq(a, b, msg)     { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((msg||'') + `\n  Esperado: ${JSON.stringify(b)}\n  Obtido: ${JSON.stringify(a)}`); }
+function noThrow(fn, msg)      { try { fn(); } catch(e) { throw new Error((msg||'') + ': ' + e.message); } }
+function throws(fn, msg)       { let ok = false; try { fn(); } catch { ok = true; } if (!ok) throw new Error(msg || 'Deveria ter lançado uma exceção'); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 function buildCurrent(unassigned, assigned) {
   const current = {};
   unassigned.forEach(i => { current[i.key] = { status: i.status, assignee: null, updated: i.updated }; });
-  assigned.forEach(i => { current[i.key] = { status: i.status, assignee: i.assignee, updated: i.updated }; });
+  assigned.forEach(i   => { current[i.key] = { status: i.status, assignee: i.assignee, updated: i.updated }; });
   return current;
 }
 
+// Espelho de detectarNovidades (index.html).
+// MUDANÇA: a truncagem agora vem do backend (`data.truncated`, baseado no total
+// REAL do Jira) em vez de `totalAssigned > assigned.length`, que comparava
+// contagens já filtradas e nunca refletia a paginação.
 function swDetect(known, data) {
   const unassigned = data.unassigned || [];
-  const assigned = data.assigned || [];
+  const assigned   = data.assigned   || [];
   const isFirstRun = Object.keys(known).length === 0;
 
   const current = buildCurrent(unassigned, assigned);
   if (isFirstRun) return { isFirstRun: true, current, novos: [], status: [], mov: [], desap: [] };
 
-  const novos = unassigned.filter(i => { const p = known[i.key]; return !p || p.assignee !== null; });
-  const status = assigned.filter(i => { const p = known[i.key]; return p && p.status !== i.status; })
+  const novos = unassigned.filter(i => { const p=known[i.key]; return !p || p.assignee !== null; });
+  const status = assigned.filter(i  => { const p=known[i.key]; return p && p.status !== i.status; })
     .map(i => ({ ...i, prevStatus: known[i.key].status }));
 
-  const novosKeys = new Set(novos.map(i => i.key));
-  const statusKeys = new Set(status.map(i => i.key));
+  const novosKeys  = new Set(novos.map(i=>i.key));
+  const statusKeys = new Set(status.map(i=>i.key));
 
   const all = unassigned.concat(assigned);
   const mov = all.filter(i => {
@@ -50,28 +55,33 @@ function swDetect(known, data) {
     return p && p.status === i.status && p.updated !== i.updated;
   });
 
-  const currentKeys = new Set(all.map(i => i.key));
-  const trunc = (data.totalAssigned || 0) > assigned.length;
+  const currentKeys = new Set(all.map(i=>i.key));
+  const trunc = data.truncated === true;
   const desap = trunc ? [] : Object.keys(known).filter(k => !currentKeys.has(k) && known[k].assignee !== null);
 
   return { isFirstRun: false, current, novos, status, mov, desap };
 }
 
+// Espelho de buscar() (index.html).
+// NOVO: buscas manuais (silencioso falso) enviam fresh=1 para furar o cache do
+// servidor; o polling silencioso não envia.
 function buildParams(config) {
   const params = new URLSearchParams();
-  if (config.vertical) params.set('vertical', config.vertical);
-  if (config.portfolio) params.set('portfolio', config.portfolio);
-  if (config.equipe) params.set('cf[21500]', config.equipe);
-  if (config.users) params.set('users', config.users);
-  if (config.days && config.days !== '0') params.set('days', config.days);
+  if (config.vertical)                    params.set('vertical',  config.vertical);
+  if (config.portfolio)                   params.set('portfolio', config.portfolio);
+  if (config.equipe)                      params.set('cf[21500]', config.equipe);
+  if (config.users)                       params.set('users',     config.users);
+  if (config.days && config.days !== '0') params.set('days',      config.days);
 
   const arrTypeKeys = config.typeIds ? config.typeIds.split(',').filter(Boolean) : [];
   const totalDisponivel = config.totalTiposDisponiveis || 0;
   const todosSelecionados = arrTypeKeys.length >= totalDisponivel && totalDisponivel > 0;
-
+  
   if (arrTypeKeys.length > 0 && !todosSelecionados) {
     params.set('typeIds', arrTypeKeys.join(','));
   }
+
+  if (!config.silencioso) params.set('fresh', '1');
 
   return params.toString();
 }
@@ -88,14 +98,14 @@ function preenchidos(vertical, portfolio, equipe, userNames) {
 function dedup(apiUsers, selectedUsers) {
   const sNames = {}; const sEmails = {};
   return apiUsers.filter(u => {
-    const nk = (u.name || '').toLowerCase();
+    const nk = (u.name  || '').toLowerCase();
     const ek = (u.email || '').toLowerCase();
-    if (sNames[nk]) return false;
-    if (ek && sEmails[ek]) return false;
+    if (sNames[nk])                      return false;
+    if (ek && sEmails[ek])               return false;
     sNames[nk] = true;
     if (ek) sEmails[ek] = true;
     return !selectedUsers.some(s =>
-      (s.name || '').toLowerCase() === nk ||
+      (s.name  || '').toLowerCase() === nk ||
       (ek && (s.email || '').toLowerCase() === ek));
   });
 }
@@ -103,11 +113,11 @@ function dedup(apiUsers, selectedUsers) {
 function mapIssue(raw) {
   const f = raw.fields;
   return {
-    key: raw.key,
-    status: f.status?.name ?? '—',
-    statusCat: f.status?.statusCategory?.key ?? '',
-    assignee: f.assignee?.displayName ?? null,
-    sistema: f.customfield_10132?.value ?? null,
+    key:       raw.key,
+    status:    f.status?.name ?? '—',
+    statusCat: f.status?.statusCategory?.key ?? '', 
+    assignee:  f.assignee?.displayName ?? null,
+    sistema:   f.customfield_10132?.value ?? null, 
   };
 }
 
@@ -150,16 +160,20 @@ function detectarNovidadesSafe(knownIssues, data, detectFn) {
   try {
     detectFn(knownIssues, data);
     detectOk = true;
-  } catch (e) { }
+  } catch(e) {}
   (data.unassigned || []).concat(data.assigned || []).forEach(i => {
     baseline[i.key] = { status: i.status, assignee: i.assignee || null, updated: i.updated };
   });
   return { detectOk, baseline };
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// TESTES EXISTENTES (lógica espelhada do front)
+// ═════════════════════════════════════════════════════════════════════════════
+
 test('SW: baseline vazio na execução inicial -> isFirstRun=true, sem notificações', () => {
   const r = swDetect({}, {
-    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
+    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
     assigned: []
   });
   assert(r.isFirstRun, 'Deveria identificar o primeiro ciclo como baseline');
@@ -169,8 +183,8 @@ test('SW: baseline vazio na execução inicial -> isFirstRun=true, sem notifica�
 
 test('SW: baseline inicial preenche o estado current corretamente', () => {
   const r = swDetect({}, {
-    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'Y' }],
+    unassigned: [{ key:'A-1', status:'Aberto',      assignee:null,   updated:'t1', summary:'X' }],
+    assigned:   [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'Y' }],
   });
   eq(r.current['A-1'].assignee, null, 'Jean não deve estar atribuído a A-1');
   eq(r.current['B-1'].assignee, 'Jean', 'Jean deve ser o analista de B-1');
@@ -178,11 +192,11 @@ test('SW: baseline inicial preenche o estado current corretamente', () => {
 });
 
 test('SW: novo chamado sem responsável é devidamente sinalizado', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [
-      { key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' },
-      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'Novo' },
+      { key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' },
+      { key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'Novo' },
     ], assigned: []
   });
   eq(r.novos.length, 1, 'Deve detectar exatamente um novo chamado');
@@ -190,9 +204,9 @@ test('SW: novo chamado sem responsável é devidamente sinalizado', () => {
 });
 
 test('SW: chamado atribuído que foi devolvido para a fila -> unassigned de volta', () => {
-  const known = { 'A-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
+  const known = { 'A-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
   const r = swDetect(known, {
-    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }],
+    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t2', summary:'X' }],
     assigned: []
   });
   eq(r.novos.length, 1, 'Chamados devolvidos para a fila contam como novos unassigned');
@@ -200,19 +214,19 @@ test('SW: chamado atribuído que foi devolvido para a fila -> unassigned de volt
 });
 
 test('SW: ticket sem responsável inalterado NÃO dispara', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
   const r = swDetect(known, {
-    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
+    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
     assigned: []
   });
   eq(r.novos.length, 0);
 });
 
 test('SW: mudança de status detectada', () => {
-  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
+  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
+    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
   });
   eq(r.status.length, 1, 'Deve disparar mudança de status');
   eq(r.status[0].prevStatus, 'Aberto', 'O status anterior deve ser Aberto');
@@ -220,21 +234,21 @@ test('SW: mudança de status detectada', () => {
 });
 
 test('SW: status idêntico com updated alterado -> movimentação', () => {
-  const known = { 'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
+  const known = { 'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
+    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
   });
   eq(r.status.length, 0, 'Não deve reportar mudança de status');
   eq(r.mov.length, 1, 'Modificações no ticket contam como movimentação recente');
 });
 
 test('SW: ticket coberto por novos não entra em movimentação', () => {
-  const known2 = { 'X-1': { status: 'Aberto', assignee: null, updated: 't0' } };
+  const known2 = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
   const r = swDetect(known2, {
     unassigned: [
-      { key: 'X-1', status: 'Aberto', assignee: null, updated: 't0', summary: 'X' },
-      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't1', summary: 'Novo' },
+      { key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' },
+      { key:'A-2', status:'Aberto', assignee:null, updated:'t1', summary:'Novo' },
     ], assigned: []
   });
   assert(!r.mov.some(i => i.key === 'A-2'), 'novo não deve estar em mov');
@@ -242,64 +256,64 @@ test('SW: ticket coberto por novos não entra em movimentação', () => {
 });
 
 test('SW: ticket coberto por statusAlterado não entra em movimentação', () => {
-  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
+  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }]
+    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }]
   });
   eq(r.mov.length, 0, 'mudança de status não deve duplicar em mov');
 });
 
 test('SW: desaparecidos detectados quando o resultado não for truncado', () => {
   const known = {
-    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
-    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
+    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
+    'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
-    totalAssigned: 1
+    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
+    truncated: false
   });
   eq(r.desap.length, 1); eq(r.desap[0], 'B-2');
 });
 
 test('SW: desaparecidos ignorados de forma segura quando a paginação estiver truncada', () => {
   const known = {
-    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
-    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
+    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
+    'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
-    totalAssigned: 5
+    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
+    truncated: true
   });
   eq(r.desap.length, 0, 'Para evitar falsos alertas de encerramento, o SW ignora desaparecidos se truncado');
 });
 
 test('SW: unassigned não conta como desaparecido', () => {
   const known = {
-    'A-1': { status: 'Aberto', assignee: null, updated: 't1' },
-    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
+    'A-1': { status:'Aberto', assignee:null,   updated:'t1' },
+    'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' },
   };
   const r = swDetect(known, {
-    unassigned: [], assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
-    totalAssigned: 1
+    unassigned: [], assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
+    truncated: false
   });
   assert(!r.desap.includes('A-1'), 'unassigned não deve aparecer em desap');
 });
 
 test('SW: múltiplas detecções não se sobrepõem', () => {
-  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
-  const data = { unassigned: [], assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }], totalAssigned: 1 };
+  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
+  const data = { unassigned:[], assigned:[{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }], truncated:false };
   const r = swDetect(known, data);
   eq(r.status.length, 1, 'deve estar em status');
   eq(r.mov.length, 0, 'não deve estar em mov');
 });
 
 test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () => {
-  const known = { 'X-1': { status: 'Aberto', assignee: null, updated: 't0' } };
+  const known = { 'X-1': { status:'Aberto', assignee:null, updated:'t0' } };
   const data = {
-    unassigned: [{ key: 'X-1', status: 'Aberto', assignee: null, updated: 't0', summary: 'X' }],
-    assigned: [{ key: 'B-9', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'Novo atribuído' }],
-    totalAssigned: 1
+    unassigned: [{ key:'X-1', status:'Aberto', assignee:null, updated:'t0', summary:'X' }],
+    assigned:   [{ key:'B-9', status:'Aberto', assignee:'Jean', updated:'t1', summary:'Novo atribuído' }],
+    truncated: false
   };
   const r = swDetect(known, data);
   assert(!r.status.some(i => i.key === 'B-9'), 'ticket novo in assigned não dispara status');
@@ -307,13 +321,13 @@ test('SW: ticket totalmente novo em assigned não dispara statusAlterado', () =>
 
 test('SW: knownIssues passado pela página é usado como baseline correto', () => {
   const pageKnown = {
-    'A-1': { status: 'Aberto', assignee: null, updated: 't1' },
-    'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' },
+    'A-1': { status:'Aberto',       assignee:null,   updated:'t1' },
+    'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' },
   };
   const r = swDetect(pageKnown, {
-    unassigned: [{ key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' }],
-    assigned: [{ key: 'B-1', status: 'Aguardando Manutenção', assignee: 'Jean', updated: 't2', summary: 'Y' }],
-    totalAssigned: 1
+    unassigned: [{ key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' }],
+    assigned:   [{ key:'B-1', status:'Aguardando Manutenção', assignee:'Jean', updated:'t2', summary:'Y' }],
+    truncated: false
   });
   assert(!r.isFirstRun, 'não deve ser firstRun quando página passa knownIssues');
   eq(r.status.length, 1, 'mudança de status detectada na primeira poll do SW');
@@ -339,17 +353,17 @@ test('buildParams: todos os campos enviados corretamente', () => {
 });
 
 test('buildParams: days="0" não é enviado', () => {
-  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', days: '0', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'0', totalTiposDisponiveis: 0 });
   assert(!p.includes('days'), 'days=0 não deve ser enviado');
 });
 
 test('buildParams: days="30" é enviado', () => {
-  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', days: '30', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', days:'30', totalTiposDisponiveis: 0 });
   assert(p.includes('days=30'), 'days=30 deve ser enviado');
 });
 
 test('buildParams: users vazio não é enviado', () => {
-  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', users: '', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', users:'', totalTiposDisponiveis: 0 });
   assert(!p.includes('users'), 'users vazio não deve ser enviado');
 });
 
@@ -384,8 +398,18 @@ test('buildParams: typeIds enviado quando seleção é parcial', () => {
 });
 
 test('buildParams: equipe não enviada quando vazia', () => {
-  const p = buildParams({ vertical: 'Contábil', portfolio: 'P', equipe: '', totalTiposDisponiveis: 0 });
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', equipe:'', totalTiposDisponiveis: 0 });
   assert(!p.includes('cf%5B21500%5D') && !p.includes('cf[21500]'), 'equipe vazia não deve ser enviada');
+});
+
+test('buildParams: busca manual envia fresh=1 (fura o cache do servidor)', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', silencioso:false, totalTiposDisponiveis: 0 });
+  assert(p.includes('fresh=1'), 'busca manual deve pedir dado fresco');
+});
+
+test('buildParams: polling silencioso NÃO envia fresh (aproveita o cache)', () => {
+  const p = buildParams({ vertical:'Contábil', portfolio:'P', silencioso:true, totalTiposDisponiveis: 0 });
+  assert(!p.includes('fresh'), 'polling automático deve aproveitar o cache do servidor');
 });
 
 test('preenchidos: vertical + portfolio = 2', () => {
@@ -485,9 +509,9 @@ test('mapIssue: statusCat "indeterminate" para em andamento', () => {
 
 test('detectarNovidades: usa statusCat "done" (key) para detectar encerrados', () => {
   const issues = [
-    { key: 'B-1', statusCat: 'done', status: 'Resolvido' },
+    { key: 'B-1', statusCat: 'done',           status: 'Resolvido' },
     { key: 'B-2', statusCat: 'indeterminate', status: 'Em andamento' },
-    { key: 'B-3', statusCat: 'new', status: 'Aberto' },
+    { key: 'B-3', statusCat: 'new',            status: 'Aberto' },
   ];
   const encerrados = issues.filter(i => i.statusCat === 'done');
   eq(encerrados.length, 1);
@@ -496,33 +520,33 @@ test('detectarNovidades: usa statusCat "done" (key) para detectar encerrados', (
 
 test('Dedup: duplicado por e-mail removido (name é e-mail no estado atual)', () => {
   const api = [
-    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon Henrique Ern' },
-    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon Henrique Ern' },
+    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
+    { name:'marlon.ern@betha.com.br', email:'marlon.ern@betha.com.br', displayName:'Marlon Henrique Ern' },
   ];
   const r = dedup(api, []);
   eq(r.length, 1);
 });
 
 test('Dedup: usuário selecionado por e-mail é excluído do autocomplete', () => {
-  const api = [{ name: 'filipe.andrade@betha.com.br', email: 'filipe.andrade@betha.com.br', displayName: 'Filipe Pereira Andrade' }];
-  const sel = [{ name: 'filipe.andrade@betha.com.br', email: 'filipe.andrade@betha.com.br' }];
+  const api = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br', displayName:'Filipe Pereira Andrade' }];
+  const sel = [{ name:'filipe.andrade@betha.com.br', email:'filipe.andrade@betha.com.br' }];
   const r = dedup(api, sel);
   eq(r.length, 0, 'usuário já selecionado não deve aparecer no autocomplete');
 });
 
 test('Dedup: usuário diferente com e-mail diferente mantido', () => {
   const api = [
-    { name: 'jean.vieira@betha.com.br', email: 'jean.vieira@betha.com.br', displayName: 'Jean' },
-    { name: 'marlon.ern@betha.com.br', email: 'marlon.ern@betha.com.br', displayName: 'Marlon' },
+    { name:'jean.vieira@betha.com.br',   email:'jean.vieira@betha.com.br',   displayName:'Jean' },
+    { name:'marlon.ern@betha.com.br',    email:'marlon.ern@betha.com.br',    displayName:'Marlon' },
   ];
-  const sel = [{ name: 'jean.vieira@betha.com.br', email: 'jean.vieira@betha.com.br' }];
+  const sel = [{ name:'jean.vieira@betha.com.br', email:'jean.vieira@betha.com.br' }];
   const r = dedup(api, sel);
   eq(r.length, 1); eq(r[0].name, 'marlon.ern@betha.com.br');
 });
 
 test('Dedup: usuário sem e-mail usa name como fallback', () => {
   const api = [
-    { name: 'usuario-interno', email: '', displayName: 'Usuário Interno' },
+    { name:'usuario-interno', email:'', displayName:'Usuário Interno' },
   ];
   const sel = [];
   const r = dedup(api, sel);
@@ -532,49 +556,49 @@ test('Dedup: usuário sem e-mail usa name como fallback', () => {
 test('Dedup: JQL usa e-mail como assignee (name = e-mail)', () => {
   const rawUser = { name: 'filipe.andrade', emailAddress: 'filipe.andrade@betha.com.br', displayName: 'Filipe Pereira Andrade' };
   const mapped = {
-    name: rawUser.emailAddress || rawUser.name,
+    name:        rawUser.emailAddress || rawUser.name,
     displayName: rawUser.displayName,
-    email: rawUser.emailAddress,
+    email:       rawUser.emailAddress,
   };
   eq(mapped.name, 'filipe.andrade@betha.com.br', 'name deve ser o email para uso no JQL');
 });
 
 test('Consistência: página e SW detectam novosUnassigned da mesma forma', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
   const data = {
     unassigned: [
-      { key: 'A-1', status: 'Aberto', assignee: null, updated: 't1', summary: 'X' },
-      { key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'Y' },
+      { key:'A-1', status:'Aberto', assignee:null, updated:'t1', summary:'X' },
+      { key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'Y' },
     ],
-    assigned: [], totalAssigned: 0
+    assigned: [], truncated: false
   };
   const sw = swDetect(known, data);
   const pageNovos = data.unassigned.filter(i => {
     const prev = known[i.key];
     return !prev || prev.assignee !== null;
   });
-  deepEq(sw.novos.map(i => i.key), pageNovos.map(i => i.key), 'SW e página devem concordar em novosUnassigned');
+  deepEq(sw.novos.map(i=>i.key), pageNovos.map(i=>i.key), 'SW e página devem concordar em novosUnassigned');
 });
 
 test('Consistência: página e SW detectam statusAlterado da mesma forma', () => {
-  const known = { 'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' } };
+  const known = { 'B-1': { status:'Aberto', assignee:'Jean', updated:'t1' } };
   const data = {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }],
-    totalAssigned: 1
+    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }],
+    truncated: false
   };
   const sw = swDetect(known, data);
-  const pageStatus = data.assigned.filter(i => { const p = known[i.key]; return p && p.status !== i.status; });
+  const pageStatus = data.assigned.filter(i => { const p=known[i.key]; return p && p.status !== i.status; });
   eq(sw.status.length, pageStatus.length);
   eq(sw.status[0]?.key, pageStatus[0]?.key);
 });
 
 test('Consistência: página e SW detectam movimentados da mesma forma', () => {
-  const known = { 'B-1': { status: 'Em andamento', assignee: 'Jean', updated: 't1' } };
+  const known = { 'B-1': { status:'Em andamento', assignee:'Jean', updated:'t1' } };
   const data = {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Em andamento', assignee: 'Jean', updated: 't2', summary: 'X' }],
-    totalAssigned: 1
+    assigned: [{ key:'B-1', status:'Em andamento', assignee:'Jean', updated:'t2', summary:'X' }],
+    truncated: false
   };
   const sw = swDetect(known, data);
   eq(sw.mov.length, 1); eq(sw.mov[0].key, 'B-1');
@@ -642,34 +666,34 @@ test('sortState: preservado durante refresh silencioso', () => {
 });
 
 test('baseline atualiza mesmo se detectarNovidades lançar exceção', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
-  const data = { unassigned: [{ key: 'A-2', status: 'Aberto', assignee: null, updated: 't2', summary: 'X' }], assigned: [] };
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const data  = { unassigned: [{ key:'A-2', status:'Aberto', assignee:null, updated:'t2', summary:'X' }], assigned: [] };
   const r = detectarNovidadesSafe(known, data, () => { throw new Error('erro simulado'); });
   assert(r.baseline['A-2'], 'novo issue deve estar no baseline');
   assert(!r.baseline['A-1'], 'issue antigo não deve persistir');
 });
 
 test('baseline atualiza normalmente sem exceção', () => {
-  const known = { 'A-1': { status: 'Aberto', assignee: null, updated: 't1' } };
-  const data = { unassigned: [{ key: 'A-1', status: 'Em andamento', assignee: null, updated: 't2', summary: 'Y' }], assigned: [] };
+  const known = { 'A-1': { status:'Aberto', assignee:null, updated:'t1' } };
+  const data  = { unassigned: [{ key:'A-1', status:'Em andamento', assignee:null, updated:'t2', summary:'Y' }], assigned: [] };
   const r = detectarNovidadesSafe(known, data, (k, d) => swDetect(k, d));
   assert(r.detectOk, 'detect deve ter rodado sem erro');
   eq(r.baseline['A-1'].status, 'Em andamento');
 });
 
 test('AbortController: AbortError silencioso com busca ativa mantém polling', () => {
-  const r = mockCatch({ name: 'AbortError' }, true, true);
+  const r = mockCatch({ name:'AbortError' }, true, true);
   assert(r.reagendado, 'deve reagendar');
   assert(!r.erroExibido, 'não deve exibir erro');
 });
 
 test('AbortController: AbortError em busca manual não exibe erro', () => {
-  const r = mockCatch({ name: 'AbortError' }, false, true);
+  const r = mockCatch({ name:'AbortError' }, false, true);
   assert(!r.erroExibido, 'busca manual abortada não exibe banner de erro');
 });
 
 test('AbortController: erro real (não abort) exibe mensagem', () => {
-  const r = mockCatch({ name: 'Error', message: 'timeout' }, false, false);
+  const r = mockCatch({ name:'Error', message:'timeout' }, false, false);
   assert(r.erroExibido, 'erro real deve ser exibido');
 });
 
@@ -678,9 +702,9 @@ test('Filtragem em memória: tipos excluídos indesejados são expurgados com su
     { key: 'CH-1', fields: { status: { name: 'Aberto' }, issuetype: { name: 'Incidente' } } },
     { key: 'CH-2', fields: { status: { name: 'Aberto' }, issuetype: { name: 'Sub-tarefa' } } },
   ];
-
+  
   const NOMES_TIPOS_EXCLUIDOS = ['Sub-tarefa', 'Ação (sub-tarefa)'];
-
+  
   const filtrados = rawIssues
     .map(i => ({ key: i.key, type: i.fields.issuetype.name }))
     .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type));
@@ -692,7 +716,7 @@ test('Filtragem em memória: tipos excluídos indesejados são expurgados com su
 test('Filtro de Tipos: validação permite até 150 tipos (Prevenção do bug do corte alfabético)', () => {
   const muitosTipos = Array.from({ length: 160 }, (_, i) => `Tipo${i}`).join(',');
   const resultado = validateTypesMock(muitosTipos);
-
+  
   eq(resultado.length, 150, 'A validação deve limitar e processar no máximo 150 tipos (antigo limite de 50)');
   eq(resultado[0], 'Tipo0', 'O primeiro tipo deve ser o Tipo0');
   eq(resultado[149], 'Tipo149', 'O 150º tipo deve ser mantido antes do corte limítrofe');
@@ -703,12 +727,12 @@ test('SW: filtro de prestação de contas ativo NÃO suprime desaparecidos (regr
   // verdadeiro sempre que o filtro de prestação de contas escondia itens, e os
   // chamados encerrados deixavam de ser detectados. Agora só `truncated` conta.
   const known = {
-    'B-1': { status: 'Aberto', assignee: 'Jean', updated: 't1' },
-    'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' },
+    'B-1': { status:'Aberto', assignee:'Jean',  updated:'t1' },
+    'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' },
   };
   const r = swDetect(known, {
     unassigned: [],
-    assigned: [{ key: 'B-1', status: 'Aberto', assignee: 'Jean', updated: 't1', summary: 'X' }],
+    assigned: [{ key:'B-1', status:'Aberto', assignee:'Jean', updated:'t1', summary:'X' }],
     totalAssigned: 5, prestacaoContasAtivo: true, truncated: false
   });
   eq(r.desap.length, 1, 'sem truncagem real, o chamado sumido deve ser detectado');
@@ -718,7 +742,7 @@ test('SW: filtro de prestação de contas ativo NÃO suprime desaparecidos (regr
 test('SW: truncagem só na lista sem responsável também suprime desaparecidos', () => {
   // Um chamado atribuído pode ter voltado para a fila e ficado fora do limite da
   // lista sem responsável: não dá para afirmar que foi encerrado.
-  const known = { 'B-2': { status: 'Aberto', assignee: 'Maria', updated: 't1' } };
+  const known = { 'B-2': { status:'Aberto', assignee:'Maria', updated:'t1' } };
   const r = swDetect(known, {
     unassigned: [], assigned: [],
     truncatedUnassigned: true, truncatedAssigned: false, truncated: true
@@ -737,13 +761,13 @@ test('SW: truncagem só na lista sem responsável também suprime desaparecidos'
 // ═════════════════════════════════════════════════════════════════════════════
 
 const API_DIR = path.join(__dirname, 'api');
-process.env.JIRA_URL = 'https://jira.test';
-process.env.JIRA_USER = 'svc';
+process.env.JIRA_URL      = 'https://jira.test';
+process.env.JIRA_USER     = 'svc';
 process.env.JIRA_PASSWORD = 'pwd';
 
 // O handler registra erros esperados (Jira 500/400 simulados) com console.error.
 // Silenciamos para não poluir a saída dos testes; falhas reais aparecem no relatório.
-console.error = () => { };
+console.error = () => {};
 
 // Recarrega o handler com módulos "limpos". `env` vale só durante o require,
 // pois TTL do cache e teto de chamados são lidos no carregamento do módulo.
@@ -766,17 +790,17 @@ function makeRaw(kind, n, unassigned) {
   return {
     key: `${kind}-${n}`,
     fields: {
-      summary: `Chamado ${n}`,
-      status: { name: 'Aberto', statusCategory: { key: 'new' } },
-      priority: { name: 'High' },
+      summary:   `Chamado ${n}`,
+      status:    { name: 'Aberto', statusCategory: { key: 'new' } },
+      priority:  { name: 'High' },
       issuetype: { name: 'Dúvida' },
-      assignee: unassigned ? null : { displayName: 'Jean' },
-      updated: '2026-10-01T10:00:00.000-0300',
+      assignee:  unassigned ? null : { displayName: 'Jean' },
+      updated:   '2026-10-01T10:00:00.000-0300',
       customfield_10132: { value: 'Contábil Cloud' },
       customfield_32400: { value: 'Portfólio SC/MG' },
       customfield_21500: { value: 'Suporte' },
       customfield_10335: '',
-      security: null,
+      security:  null,
     },
   };
 }
@@ -814,8 +838,8 @@ function installFakeJira(cfg = {}) {
       }
       const unassigned = body.jql.includes('assignee is EMPTY');
       const total = unassigned ? c.unassignedTotal : c.assignedTotal;
-      const size = c.pageCap ? Math.min(body.maxResults, c.pageCap) : body.maxResults;
-      const n = Math.max(0, Math.min(size, total - body.startAt));
+      const size  = c.pageCap ? Math.min(body.maxResults, c.pageCap) : body.maxResults;
+      const n     = Math.max(0, Math.min(size, total - body.startAt));
       const issues = Array.from({ length: n }, (_, i) => {
         const raw = makeRaw(unassigned ? 'UN' : 'AS', body.startAt + i, unassigned);
         return c.issueOverride ? c.issueOverride(unassigned ? 'UN' : 'AS', body.startAt + i, raw) : raw;
@@ -831,8 +855,8 @@ async function call(handler, query, method = 'GET') {
   const res = {
     headers: {}, code: null, body: null,
     setHeader(k, v) { this.headers[k] = v; },
-    status(c) { this.code = c; return this; },
-    json(b) { this.body = b; return this; },
+    status(c)       { this.code = c; return this; },
+    json(b)         { this.body = b; return this; },
   };
   await handler({ method, query }, res);
   return res;
@@ -1062,9 +1086,9 @@ test('Prestação de contas: excluir/apenas filtram no Node sem nova consulta ao
     issueOverride: (kind, n, raw) => { if (n < 3) raw.fields.customfield_10335 = 'SIOPE, Outra coisa'; return raw; },
   });
   const h = loadHandler();
-  const todos = await call(h, Q);
+  const todos   = await call(h, Q);
   const excluir = await call(h, { ...Q, prestacaoContas: 'excluir' });
-  const apenas = await call(h, { ...Q, prestacaoContas: 'apenas' });
+  const apenas  = await call(h, { ...Q, prestacaoContas: 'apenas' });
   eq(todos.body.unassigned.length, 10);
   eq(excluir.body.unassigned.length, 7);
   eq(apenas.body.unassigned.length, 3);
@@ -1305,6 +1329,67 @@ test('Tempo relativo: atualização por intervalo muda o texto conforme o tempo 
 });
 
 
+// ── Falhas de rede ───────────────────────────────────────────────────────────
+
+test('Rede: falha de conexão com o Jira vira 502 JIRA_ERROR (não 500 INTERNAL_ERROR)', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch;
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 502);
+  eq(r.body.code, 'JIRA_ERROR');
+});
+
+test('Rede: falha em UMA das páginas paralelas também vira 502 e não fica em cache', async () => {
+  const log = installFakeJira({ unassignedTotal: 250 });
+  const antes = global.fetch;
+  let derrubar = true;
+  global.fetch = async (url, opts) => {
+    if (derrubar && String(url).endsWith('/rest/api/2/search') && JSON.parse(opts.body).startAt === 100) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  const h = loadHandler();
+  const r1 = await call(h, Q);
+  eq(r1.code, 502);
+  derrubar = false;
+  const r2 = await call(h, Q);
+  eq(r2.code, 200, 'a falha transitória não pode ficar em cache');
+  eq(r2.body.unassigned.length, 250);
+});
+
+test('Rede: timeout (AbortError) continua respondendo 504 TIMEOUT', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch;
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+    return antes(url, opts);
+  };
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 504);
+  eq(r.body.code, 'TIMEOUT');
+});
+
+test('Rede: o log do servidor traz o código real da falha (err.cause)', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch, logAntes = console.error, linhas = [];
+  console.error = (...a) => linhas.push(a.join(' '));
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ETIMEDOUT' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  try { await call(loadHandler(), Q); } finally { console.error = logAntes; }
+  assert(linhas.some(l => l.includes('ETIMEDOUT')), 'log sem a causa real: ' + JSON.stringify(linhas));
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // NOVOS TESTES — Campo `created` removido e lista única de tipos excluídos
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1326,15 +1411,15 @@ test('Tipos excluídos: módulo compartilhado exporta array congelado e Set equi
 });
 
 test('Tipos excluídos: fonte única — tipos.js e chamados.js não têm cópia da lista', () => {
-  const fonte = fs.readFileSync(path.join(API_DIR, '_lib', 'tipos-excluidos.js'), 'utf8');
-  const tipos = fs.readFileSync(path.join(API_DIR, 'tipos.js'), 'utf8');
+  const fonte  = fs.readFileSync(path.join(API_DIR, '_lib', 'tipos-excluidos.js'), 'utf8');
+  const tipos  = fs.readFileSync(path.join(API_DIR, 'tipos.js'), 'utf8');
   const chamad = fs.readFileSync(path.join(API_DIR, 'chamados.js'), 'utf8');
   assert(fonte.includes('NÃO USAR'), 'a lista deve viver em _lib/tipos-excluidos.js');
   ['Pre-Condition', 'NÃO USAR', 'Sub-tarefa'].forEach(marca => {
-    assert(!tipos.includes(marca), 'tipos.js voltou a ter uma cópia da lista (' + marca + ')');
+    assert(!tipos.includes(marca),  'tipos.js voltou a ter uma cópia da lista (' + marca + ')');
     assert(!chamad.includes(marca), 'chamados.js voltou a ter uma cópia da lista (' + marca + ')');
   });
-  assert(tipos.includes("require('./_lib/tipos-excluidos')"), 'tipos.js deve importar a lista compartilhada');
+  assert(tipos.includes("require('./_lib/tipos-excluidos')"),  'tipos.js deve importar a lista compartilhada');
   assert(chamad.includes("require('./_lib/tipos-excluidos')"), 'chamados.js deve importar a lista compartilhada');
 });
 
@@ -1529,3 +1614,5 @@ async function main() {
     console.log('Todos os testes foram executados com absoluto sucesso em pt-BR!');
   }
 }
+
+main();

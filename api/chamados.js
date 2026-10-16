@@ -106,6 +106,8 @@ function filtrarPrestacaoContas(issues, modo) {
   return issues;
 }
 
+const EMPTY_RESULT = { issues: [], total: 0, loaded: 0, truncated: false };
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ ok: false, error: 'Método não permitido.', code: 'METHOD_NOT_ALLOWED' });
@@ -137,16 +139,26 @@ module.exports = async function handler(req, res) {
     ? req.query.prestacaoContas
     : 'incluir';
 
-  const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned');
-  const jqlAssigned   = users.length > 0
-    ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned')
-    : null;
+  
+  const fresh = req.query.fresh === '1';
 
   try {
+    const excludedTypeIds = await getExcludedTypeIds();
+
+    const jqlUnassigned = buildJql(params, users, selectedTypeIds, selectedTypes, days, 'unassigned', excludedTypeIds);
+    const jqlAssigned   = users.length > 0
+      ? buildJql(params, users, selectedTypeIds, selectedTypes, days, 'assigned', excludedTypeIds)
+      : null;
+
+    const reqUnassigned = cachedSearch(jqlUnassigned, { bypass: fresh });
+    const reqAssigned   = jqlAssigned ? cachedSearch(jqlAssigned, { bypass: fresh }) : null;
+
     const [dataUnassigned, dataAssigned] = await Promise.all([
-      searchIssues(jqlUnassigned, FIELDS),
-      jqlAssigned ? searchIssues(jqlAssigned, FIELDS) : Promise.resolve({ issues: [], total: 0 }),
+      reqUnassigned.promise,
+      reqAssigned ? reqAssigned.promise : Promise.resolve(EMPTY_RESULT),
     ]);
+
+    res.setHeader('X-Cache', reqUnassigned.hit && (!reqAssigned || reqAssigned.hit) ? 'HIT' : 'MISS');
 
     const filtrarParceiro = i => mostrarParceiros || !i.isParceiro;
 
@@ -201,7 +213,7 @@ module.exports = async function handler(req, res) {
   }
 };
 
-function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode) {
+function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selectedTypes, days, mode, excludedTypeIds = []) {
   const clauses = ['statusCategory != Done'];
 
   const typeClauses = [];
@@ -216,6 +228,9 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
     clauses.push(`issuetype in (${typeClauses.join(', ')})`);
   } else {
     clauses.push('issuetype not in subTaskIssueTypes()');
+    if (excludedTypeIds.length > 0) {
+      clauses.push(`issuetype not in (${excludedTypeIds.join(', ')})`);
+    }
   }
 
   if (portfolio && portfolio.length > 0) {
@@ -243,7 +258,7 @@ function buildJql({ vertical, portfolio, equipe }, users, selectedTypeIds, selec
     clauses.push('assignee is EMPTY');
   }
 
-  return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC';
+  return clauses.join(' AND ') + ' ORDER BY priority ASC, updated DESC, key ASC';
 }
 
 function mapIssue(raw) {
