@@ -644,7 +644,6 @@
       height: 100%;
       background: var(--blue-primary);
       border-radius: 99px;
-      transition: width 1s linear;
     }
 
     .inp-warn {
@@ -1216,7 +1215,8 @@
     var acTimeout = null;
     var selectedUsers = [];
     var buscaAtiva = false;
-    var refreshCountdown = 0;
+    var refreshDeadline = 0;
+    var refreshLabelTimer = null;
     var REFRESH_INTERVAL = 60;
     var timerWorker = null;
     var timerGeneration = 0;
@@ -2230,7 +2230,7 @@
     }
 
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) atualizarTempoFila();
+      if (!document.hidden) { atualizarTempoFila(); atualizarRotuloRefresh(); }
       if (!document.hidden && buscaAtiva) {
         ativarWakeLock();
         pendingCount = 0;
@@ -2275,24 +2275,21 @@
       if (!timerWorker) {
         timerWorker = new Worker('/timer-worker.js');
         timerWorker.onmessage = function (e) {
-          var gen = e.data.gen;
-          if (e.data.type === 'tick') {
-            if (gen !== timerGeneration) return;
-            refreshCountdown = e.data.remaining;
-            atualizarBarraRefresh();
-          } else if (e.data.type === 'done') {
-            if (gen !== timerGeneration) return;
+          if (e.data.type === 'done') {
+            if (e.data.gen !== timerGeneration) return;
             document.getElementById('refresh-label').textContent = 'Atualizando...';
             document.getElementById('refresh-dot').classList.remove('pulsing');
             buscar(true);
           }
         };
       }
+      if (!refreshLabelTimer) refreshLabelTimer = setInterval(atualizarRotuloRefresh, 1000);
       agendarProximoRefresh();
     }
 
     function pararPolling() {
       timerGeneration++;
+      refreshDeadline = 0;
       if (timerWorker) { timerWorker.postMessage({ cmd: 'stop' }); }
       var bar = document.getElementById('refresh-bar');
       if (bar) bar.style.display = 'none';
@@ -2300,18 +2297,32 @@
 
     function agendarProximoRefresh() {
       document.getElementById('refresh-bar').style.display = 'flex';
-      refreshCountdown = REFRESH_INTERVAL;
-      atualizarBarraRefresh();
+      refreshDeadline = Date.now() + REFRESH_INTERVAL * 1000;
+      document.getElementById('refresh-dot').classList.add('pulsing');
+      document.getElementById('refresh-label').textContent = 'Atualiza em ' + REFRESH_INTERVAL + 's';
+      reiniciarBarraRefresh();
       if (timerWorker) {
-        timerWorker.postMessage({ cmd: 'start', interval: REFRESH_INTERVAL, gen: timerGeneration });
+        timerWorker.postMessage({ cmd: 'start', endAt: refreshDeadline, gen: timerGeneration });
       }
     }
 
-    function atualizarBarraRefresh() {
-      var pct = Math.round((refreshCountdown / REFRESH_INTERVAL) * 100);
-      document.getElementById('refresh-progress-bar').style.width = pct + '%';
-      document.getElementById('refresh-dot').classList.add('pulsing');
-      document.getElementById('refresh-label').textContent = 'Atualiza em ' + refreshCountdown + 's';
+    function reiniciarBarraRefresh() {
+      var bar = document.getElementById('refresh-progress-bar');
+      bar.style.transition = 'none';
+      bar.style.width = '100%';
+      void bar.offsetWidth;
+      bar.style.transition = 'width ' + REFRESH_INTERVAL + 's linear';
+      bar.style.width = '0%';
+    }
+
+    function segundosRestantes(deadline) {
+      return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    }
+
+    function atualizarRotuloRefresh() {
+      if (document.hidden || !refreshDeadline) return;
+      var s = segundosRestantes(refreshDeadline);
+      if (s > 0) document.getElementById('refresh-label').textContent = 'Atualiza em ' + s + 's';
     }
 
     function detectarNovidades(data) {

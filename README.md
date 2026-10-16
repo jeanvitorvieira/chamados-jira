@@ -33,7 +33,7 @@ O sistema resolve um problema recorrente de atendimento: identificar rapidamente
 * Suporte a múltiplos responsáveis simultâneos.
 * Tabela de chamados sem responsável com coluna de equipe e indicador visual de tempo em fila (atualizado automaticamente, sem recarregar a tabela).
 * Tabela de chamados atribuídos com coluna de responsável e ordenação.
-* Polling automático a cada 60 segundos com barra de progresso visual.
+* Polling automático a cada 60 segundos com barra de progresso visual (animada por CSS, sem trabalho de JavaScript por segundo).
 * **Paginação automática** das consultas ao Jira (até 300 chamados por lista) e **aviso de resultados incompletos** com o total real do Jira.
 * **Cache de curta duração no servidor** com deduplicação de consultas simultâneas.
 * Notificações nativas do sistema operacional:
@@ -54,7 +54,8 @@ chamados-jira/
 ├── api/
 │   ├── _lib/
 │   │   ├── jira.js
-│   │   └── validate.js
+│   │   ├── validate.js
+│   │   └── tipos-excluidos.js   ← lista única dos tipos ignorados
 │   ├── chamados.js
 │   ├── tipos.js
 │   ├── issues.js
@@ -118,7 +119,61 @@ O Jira Server desta instância usa o endereço de e-mail como identificador no c
 
 ### Polling com Web Worker
 
-O timer de polling roda em um `timer-worker.js` isolado, imune ao throttling de timers que o navegador aplica em abas ocultas. A página principal recebe ticks via `postMessage` e executa a busca no DOM.
+O timer de polling roda em um `timer-worker.js` isolado, imune ao throttling de timers que o navegador aplica em abas ocultas.
+
+* **Prazo absoluto:** a página envia `{ cmd: 'start', endAt, gen }`, onde `endAt` é um instante em milissegundos (`Date.now() + intervalo`). O worker compara com o relógio de parede, então não acumula *drift* e, se o computador dormir, dispara logo que acordar. O formato antigo com `interval` (segundos) continua aceito.
+* **Uma única mensagem por ciclo:** o worker só envia `{ type: 'done', gen }` ao final. Antes enviava um `tick` por segundo (60 `postMessage` por ciclo) só para animar a barra. A checagem de 1s continua existindo, mas é interna ao worker e não gera mensagens.
+* **Barra por CSS:** a página define uma transição linear de 100% → 0% com a duração do intervalo (`reiniciarBarraRefresh`), e o navegador anima sozinho.
+* **Rótulo "Atualiza em Ns":** a página recalcula o texto a partir do mesmo `endAt`, uma vez por segundo e só com a aba visível. Ao voltar para a aba, o rótulo é atualizado imediatamente.
+* O campo `gen` continua descartando mensagens de ciclos anteriores (por exemplo, um `done` em voo depois de `pararPolling`).
+
+### Cache e Deduplicação no Servidor
+
+`api/chamados.js` guarda a *promise* de cada consulta ao Jira, indexada pelo JQL completo:
+
+* **Cache:** a mesma consulta dentro do TTL (30s por padrão) é respondida da memória.
+* **Deduplicação:** se várias pessoas pedirem a mesma consulta ao mesmo tempo, só uma chamada vai ao Jira.
+* **Falhas não são cacheadas:** um timeout ou 502 não "gruda" para os próximos usuários.
+* **Busca manual fura o cache:** o front envia `fresh=1` quando o usuário clica em buscar ou muda um filtro; o resultado novo realimenta o cache. O polling automático não envia `fresh` e aproveita o cache.
+* O cache vive na memória da instância serverless. Em instância fria ele começa vazio; isso nunca piora o comportamento, apenas deixa de ajudar.
+* O header de resposta `X-Cache: HIT|MISS` indica se a resposta veio do cache (útil na aba Network do navegador).
+
+### Paginação e Total Real
+
+`searchAllIssues` (em `api/_lib/jira.js`) busca a primeira página, descobre o `total` real do Jira e busca as demais em paralelo, respeitando um teto (`JIRA_MAX_ISSUES`, padrão 300) e o `maxResults` que o servidor realmente aplicou. A resposta de `/api/chamados` informa quantos chamados existem no Jira (`jiraTotal*`), quantos foram carregados (`loaded*`) e se a lista foi truncada (`truncated*`), e o front exibe o aviso de "Resultados incompletos". O `ORDER BY` tem `key ASC` como desempate para a paginação ser estável.
+
+### Quais Filtros Rodam no JQL e Quais no Node
+
+| Filtro | Onde roda | Motivo |
+| ------ | --------- | ------ |
+| Vertical, portfólio, equipe, período, responsável | JQL | Campos com valores exatos |
+| Tipos obsoletos ("NÃO USAR", "Pre-Condition"...) | JQL (por ID) + Node (rede de segurança) | IDs resolvidos via `/issuetype`; um nome inexistente no JQL derrubaria a consulta inteira com HTTP 400 |
+| Parceiros (`security`) | Node | O JQL só compara o nível de segurança por nome exato e não existe "contém" |
+| Prestação de contas (`customfield_10335`) | Node | A regra é "texto contém rótulo"; o operador `~` do JQL é busca de texto tokenizada, com semântica diferente, e poderia esconder chamados válidos |
+
+Como parceiros e prestação de contas são filtrados *depois* do cache, alternar esses filtros não gera nova consulta ao Jira.
+
+### Renderização Incremental no Front
+
+A cada ciclo de polling, `renderResults` compara uma *assinatura* dos dados exibidos (campos visíveis na tabela + flags dos banners) com a da última renderização. Se nada mudou, o DOM não é tocado. A assinatura é zerada sempre que a área de resultados é substituída por spinner, erro ou aviso, para que o próximo polling idêntico não deixe a tela presa nessa mensagem. Como a tabela deixa de ser refeita, os badges de "tempo na fila" (`data-iso`) são atualizados por um intervalo de 30s, que fica parado com a aba oculta e roda de novo ao voltar a ela.
+
+---
+
+# Performance
+
+Resumo das otimizações e onde cada uma vive:
+
+| Otimização | Arquivo | Efeito |
+| ---------- | ------- | ------ |
+| Cache + deduplicação de consultas (TTL 30s) | `api/chamados.js` | Menos chamadas ao Jira com vários analistas usando os mesmos filtros |
+| Cache da lista de tipos excluídos (1h) | `api/chamados.js` | 1 chamada a `/issuetype` por hora, não por busca |
+| Paginação paralela com teto | `api/_lib/jira.js` | Carrega mais de 100 chamados sem requisições sequenciais |
+| Tipos obsoletos filtrados no JQL | `api/chamados.js` | O limite de resultados não é gasto com chamados descartados depois |
+| Render pulado quando nada mudou | `public/index.html` | Sem reconstruir as tabelas a cada 60s |
+| Badges de tempo por intervalo | `public/index.html` | Tempo na fila continua correto sem re-render |
+| Worker sem `tick` por segundo + barra por CSS | `public/timer-worker.js`, `public/index.html` | De 60 mensagens por ciclo para 1; sem animação da barra feita em JavaScript |
+| Campo `created` removido das consultas | `api/chamados.js` | Menos dados por chamado (a tabela só exibe `updated`) |
+| `tipos.js` com `Cache-Control` | `api/tipos.js` | Lista de tipos cacheada pelo navegador/CDN |
 
 ### Cache e Deduplicação no Servidor
 
@@ -324,7 +379,6 @@ Retorna chamados abertos agrupados em sem responsável e atribuídos.
       "type": "Incidente",
       "assignee": null,
       "updated": "2026-06-01T10:00:00.000-0300",
-      "created": "2026-05-30T08:00:00.000-0300",
       "sistema": "Contabilidade Cloud",
       "portfolio": "Portfólio Pequenas Contas",
       "equipe": "Suporte",
@@ -343,7 +397,6 @@ Retorna chamados abertos agrupados em sem responsável e atribuídos.
       "type": "Dúvida",
       "assignee": "Usuário 1",
       "updated": "2026-06-02T09:00:00.000-0300",
-      "created": "2026-05-28T14:00:00.000-0300",
       "sistema": "Contabilidade Cloud",
       "portfolio": "Portfólio Pequenas Contas",
       "equipe": "Suporte",
@@ -356,6 +409,8 @@ Retorna chamados abertos agrupados em sem responsável e atribuídos.
 ```
 
 > **Nota sobre `statusCat`:** usa a chave da categoria do Jira — `"new"`, `"indeterminate"` ou `"done"` (sempre minúsculo).
+
+> **Nota sobre `created`:** o campo não é mais pedido ao Jira nem devolvido pela API, pois nenhuma tela o utiliza.
 
 ### Contagens e Truncagem
 
@@ -552,9 +607,11 @@ O arquivo precisa ser executado a partir da raiz do projeto: ele carrega `api/ch
 * **Testes do backend real:** executam o handler verdadeiro de `api/chamados.js` (com `api/_lib/jira.js` e `api/_lib/validate.js`) contra um Jira simulado, substituindo `global.fetch`. Cada teste recarrega os módulos para zerar os caches em memória.
 * **Testes do front real:** extraem funções puras diretamente de `public/index.html` (`assinaturaDados`, `classeTempoFila`, `tempoFilaBadge`, `tempoRelativo`, `escHtml`) e as executam. Se a regra mudar no front, o teste detecta.
 
+* **Testes do worker real:** `public/timer-worker.js` é executado em um sandbox (`vm`) com relógio e timers falsos, o que torna os testes instantâneos e determinísticos.
+
 O runner é assíncrono: `test()` enfileira e `main()` executa em sequência, aguardando cada teste.
 
-## Cobertura (106 testes)
+## Cobertura (121 testes)
 
 **Lógica espelhada do front**
 
@@ -580,12 +637,22 @@ O runner é assíncrono: `test()` enfileira e `main()` executa em sequência, ag
 * JQL: tipos obsoletos por ID (só os existentes), `typeIds` explícito, `ORDER BY ... key ASC`, cache da lista de tipos, fallback quando `/issuetype` falha
 * Filtros pós-cache: parceiros e prestação de contas sem nova consulta
 * Erros da API: 405, 400 `INVALID_PARAMS`, 400 `INVALID_FILTER`, 502 `JIRA_ERROR`
+* Payload: `created` não é pedido ao Jira nem devolvido
+* Lista única de tipos excluídos: módulo compartilhado, ausência de cópias em `tipos.js`/`chamados.js`, `tipos.js` real (exclusão, agrupamento, ordenação, `Cache-Control`) e coerência entre o que o seletor esconde e o que as consultas excluem
 
 **Front real (`public/index.html`)**
 
 * Assinatura dos dados: igualdade, sensibilidade a mudanças visíveis, ordem, flags de banner, insensibilidade a campos não exibidos
 * Portão de renderização: polling idêntico não redesenha, dado alterado redesenha, busca manual e ordenação sempre redesenham, invalidação após spinner/erro/aviso
 * Tempo na fila: faixas `ok`/`avg`/`bad`, data futura, `data-iso`, escape de XSS, evolução do texto ao longo do tempo
+* Contagem regressiva: `segundosRestantes` (arredondamento e piso em zero); a página não trata mais `tick` e a transição da barra acompanha `REFRESH_INTERVAL`
+
+**Worker de polling real (`public/timer-worker.js`)**
+
+* Um único `done` e nenhum `tick` por ciclo; checagem de 1s sem passar do tempo restante
+* Relógio de parede: dispara após suspensão do computador e reagenda quando o timer vem adiantado
+* `stop` cancela; novo `start` substitui o anterior e usa o `gen` mais novo
+* Compatibilidade com `interval` e padrão de 60s
 
 ---
 
@@ -644,11 +711,18 @@ Em `public/index.html`:
 var REFRESH_INTERVAL = 60; // segundos
 ```
 
-Em `public/timer-worker.js` (se aplicável):
+O `public/timer-worker.js` não tem constante de intervalo: a página envia o prazo absoluto (`endAt`) a cada ciclo, e a barra de progresso e o rótulo usam o mesmo `REFRESH_INTERVAL`, então basta alterar essa constante.
 
-```javascript
-// O intervalo é enviado pela página via postMessage — não há constante separada.
-```
+> Com o cache de 30s no servidor, intervalos de polling menores que o TTL fazem a maioria das consultas automáticas serem respondidas do cache.
+
+---
+
+## Ajustar Cache e Limite de Chamados
+
+* **TTL do cache:** variável `CHAMADOS_CACHE_TTL_MS` (padrão 30000 ms). Valores maiores reduzem a carga no Jira, mas deixam o polling mais defasado; a busca manual sempre ignora o cache.
+* **Teto de chamados por lista:** variável `JIRA_MAX_ISSUES` (padrão 300). Aumentar carrega mais chamados, com respostas maiores e mais páginas por consulta.
+* **Quantidade de entradas do cache:** constante `CACHE_MAX_ENTRIES` em `api/chamados.js` (padrão 100).
+* **Intervalo de atualização dos badges de tempo na fila:** `setInterval(atualizarTempoFila, 30000)` em `public/index.html`.
 
 > Com o cache de 30s no servidor, intervalos de polling menores que o TTL fazem a maioria das consultas automáticas serem respondidas do cache.
 
@@ -667,7 +741,7 @@ Em `public/timer-worker.js` (se aplicável):
 
 Edite `api/chamados.js`:
 
-* Array `FIELDS` — adicione o `customfield_XXXXX` desejado.
+* Array `FIELDS` — adicione o `customfield_XXXXX` desejado. Peça apenas campos que alguma tela usa: cada campo extra aumenta o payload de todos os chamados (foi por isso que `created` saiu).
 * Função `mapIssue()` — mapeie o novo campo no objeto retornado.
 
 > Se o novo campo aparecer na tabela, inclua-o também em `assinaturaDados()` (`public/index.html`). Caso contrário, mudanças nesse campo não disparam nova renderização durante o polling.
@@ -676,10 +750,12 @@ Edite `api/chamados.js`:
 
 ## Tipos Excluídos
 
-A lista de tipos obsoletos existe em **dois lugares** e deve ser mantida igual:
+A lista de tipos obsoletos vive em um único arquivo: `api/_lib/tipos-excluidos.js` (`NOMES_TIPOS_EXCLUIDOS`, com a versão em `Set` `TIPOS_EXCLUIDOS`). Edite somente ele:
 
-* `TIPOS_EXCLUIDOS` em `api/tipos.js` — oculta os tipos do seletor.
-* `NOMES_TIPOS_EXCLUIDOS` em `api/chamados.js` — exclui os tipos das consultas (por ID, no JQL) e funciona como rede de segurança por nome no Node.
+* `api/tipos.js` usa a lista para ocultar os tipos do seletor.
+* `api/chamados.js` usa a lista para excluir os tipos das consultas (por ID, no JQL) e como rede de segurança por nome no Node.
+
+Há testes que impedem o retorno de cópias da lista nesses dois arquivos.
 
 ---
 

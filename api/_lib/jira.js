@@ -26,16 +26,23 @@ async function request(path, options = {}) {
   const timeoutId  = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`${url}${path}`, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type':  'application/json',
-        'Accept':        'application/json',
-        ...(options.headers ?? {}),
-      },
-    });
+    let response;
+    try {
+      response = await fetch(`${url}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type':  'application/json',
+          'Accept':        'application/json',
+          ...(options.headers ?? {}),
+        },
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw err;
+      const causa = err.cause?.code || err.cause?.message || err.message;
+      throw new JiraError(`Falha de rede ao consultar o Jira (${causa})`, 0, `${path}: ${causa}`);
+    }
 
     if (!response.ok) {
       let detail = '';

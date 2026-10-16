@@ -1,4 +1,5 @@
 const { searchAllIssues, get, JiraError, ConfigError } = require('./_lib/jira');
+const { TIPOS_EXCLUIDOS } = require('./_lib/tipos-excluidos');
 const { validateSearchParams, validateTypes, validateDays, validateUsers, ValidationError } = require('./_lib/validate');
 
 const FIELDS = [
@@ -7,7 +8,6 @@ const FIELDS = [
   'assignee',
   'priority',
   'issuetype',
-  'created',
   'updated',
   'customfield_32400',
   'customfield_10300',
@@ -17,16 +17,6 @@ const FIELDS = [
   'security'
 ];
 
-const NOMES_TIPOS_EXCLUIDOS = [
-  'Sub-tarefa', 'Melhoria (sub-tarefa)', 'Serviço (sub-tarefa)',
-  'Ação (sub-tarefa)', 'Pre-Condition', 'Não utilizar',
-  'Suporte (NÃO USAR - Use Dúvida)',
-  'Análise de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Alteração de dados (NÃO USAR - Use Tratamento de Dados)',
-  'Migração de Dados (NÃO USAR - Use Tratamento de Dados)',
-  'Fora de escopo (NÃO USAR - Use Dúvida)',
-  'Treinamento de Implantação old',
-];
 
 const FUNCIONALIDADES_PRESTACAO_CONTAS = [
   'Geração arquivos TCE-SC (e-Sfinge)',
@@ -42,7 +32,7 @@ const FUNCIONALIDADES_PRESTACAO_CONTAS = [
 ].map(f => f.toLowerCase());
 
 const CACHE_TTL_MS         = Number(process.env.CHAMADOS_CACHE_TTL_MS) || 30_000;
-const CACHE_MAX_ENTRIES    = 100
+const CACHE_MAX_ENTRIES    = 100;
 const MAX_ISSUES_PER_QUERY = Number(process.env.JIRA_MAX_ISSUES) || 300;
 
 const searchCache = new Map();
@@ -92,7 +82,7 @@ async function getExcludedTypeIds() {
     tiposExcluidosCache.promise = get('/rest/api/2/issuetype')
       .then(all => {
         const ids = all
-          .filter(t => NOMES_TIPOS_EXCLUIDOS.includes(t.name))
+          .filter(t => TIPOS_EXCLUIDOS.has(t.name))
           .map(t => String(t.id))
           .filter(id => /^\d+$/.test(id));
         tiposExcluidosCache.ids = ids;
@@ -149,6 +139,7 @@ module.exports = async function handler(req, res) {
     ? req.query.prestacaoContas
     : 'incluir';
 
+  
   const fresh = req.query.fresh === '1';
 
   try {
@@ -173,12 +164,12 @@ module.exports = async function handler(req, res) {
 
     const unassignedBase = (dataUnassigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(i => !TIPOS_EXCLUIDOS.has(i.type))
       .filter(filtrarParceiro);
 
     const assignedBase = (dataAssigned.issues ?? [])
       .map(mapIssue)
-      .filter(i => !NOMES_TIPOS_EXCLUIDOS.includes(i.type))
+      .filter(i => !TIPOS_EXCLUIDOS.has(i.type))
       .filter(filtrarParceiro);
 
     const unassigned = filtrarPrestacaoContas(unassignedBase, prestacaoContas);
@@ -192,6 +183,7 @@ module.exports = async function handler(req, res) {
       unassigned,
       assigned,
       prestacaoContasAtivo: prestacaoContas !== 'incluir',
+
       jiraTotalUnassigned: dataUnassigned.total,
       jiraTotalAssigned:   dataAssigned.total,
       loadedUnassigned:    dataUnassigned.loaded,
@@ -282,7 +274,6 @@ function mapIssue(raw) {
     type:      f.issuetype?.name ?? '—',
     assignee:  f.assignee?.displayName ?? null,
     updated:   f.updated,
-    created:   f.created,
     sistema:   f.customfield_10132?.value ?? null,
     portfolio: f.customfield_32400?.value ?? null,
     equipe:    f.customfield_21500?.value ?? null,

@@ -1,5 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
+const vm   = require('vm');
 
 let passed = 0, failed = 0;
 const results = [];
@@ -770,12 +771,12 @@ console.error = () => {};
 
 // Recarrega o handler com módulos "limpos". `env` vale só durante o require,
 // pois TTL do cache e teto de chamados são lidos no carregamento do módulo.
-function loadHandler(env = {}) {
+function loadHandler(env = {}, file = 'chamados.js') {
   Object.keys(require.cache).forEach(k => { if (k.startsWith(API_DIR)) delete require.cache[k]; });
   const antigo = {};
   Object.keys(env).forEach(k => { antigo[k] = process.env[k]; process.env[k] = env[k]; });
   try {
-    return require(path.join(API_DIR, 'chamados.js'));
+    return require(path.join(API_DIR, file));
   } finally {
     Object.keys(env).forEach(k => { if (antigo[k] === undefined) delete process.env[k]; else process.env[k] = antigo[k]; });
   }
@@ -795,7 +796,6 @@ function makeRaw(kind, n, unassigned) {
       issuetype: { name: 'Dúvida' },
       assignee:  unassigned ? null : { displayName: 'Jean' },
       updated:   '2026-10-01T10:00:00.000-0300',
-      created:   '2026-09-30T10:00:00.000-0300',
       customfield_10132: { value: 'Contábil Cloud' },
       customfield_32400: { value: 'Portfólio SC/MG' },
       customfield_21500: { value: 'Suporte' },
@@ -1149,9 +1149,9 @@ function extractFunction(src, name) {
 }
 
 const FRONT = new Function(
-  ['escHtml', 'tempoRelativo', 'classeTempoFila', 'tempoFilaBadge', 'assinaturaDados']
+  ['escHtml', 'tempoRelativo', 'classeTempoFila', 'tempoFilaBadge', 'assinaturaDados', 'segundosRestantes']
     .map(n => extractFunction(HTML_SRC, n)).join('\n') +
-  '\nreturn { escHtml, tempoRelativo, classeTempoFila, tempoFilaBadge, assinaturaDados };'
+  '\nreturn { escHtml, tempoRelativo, classeTempoFila, tempoFilaBadge, assinaturaDados, segundosRestantes };'
 )();
 
 const issue = o => Object.assign({
@@ -1326,6 +1326,259 @@ test('Tempo relativo: atualização por intervalo muda o texto conforme o tempo 
     Date.now = () => AGORA + 2 * 60000;          // 2 minutos depois (sem nenhum fetch)
     eq(FRONT.tempoRelativo(iso), '1h', 'o badge deve evoluir sozinho para "1h"');
   } finally { Date.now = real; }
+});
+
+
+// ── Falhas de rede ───────────────────────────────────────────────────────────
+
+test('Rede: falha de conexão com o Jira vira 502 JIRA_ERROR (não 500 INTERNAL_ERROR)', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch;
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 502);
+  eq(r.body.code, 'JIRA_ERROR');
+});
+
+test('Rede: falha em UMA das páginas paralelas também vira 502 e não fica em cache', async () => {
+  const log = installFakeJira({ unassignedTotal: 250 });
+  const antes = global.fetch;
+  let derrubar = true;
+  global.fetch = async (url, opts) => {
+    if (derrubar && String(url).endsWith('/rest/api/2/search') && JSON.parse(opts.body).startAt === 100) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ECONNRESET' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  const h = loadHandler();
+  const r1 = await call(h, Q);
+  eq(r1.code, 502);
+  derrubar = false;
+  const r2 = await call(h, Q);
+  eq(r2.code, 200, 'a falha transitória não pode ficar em cache');
+  eq(r2.body.unassigned.length, 250);
+});
+
+test('Rede: timeout (AbortError) continua respondendo 504 TIMEOUT', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch;
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) { const e = new Error('aborted'); e.name = 'AbortError'; throw e; }
+    return antes(url, opts);
+  };
+  const r = await call(loadHandler(), Q);
+  eq(r.code, 504);
+  eq(r.body.code, 'TIMEOUT');
+});
+
+test('Rede: o log do servidor traz o código real da falha (err.cause)', async () => {
+  installFakeJira({ unassignedTotal: 5 });
+  const antes = global.fetch, logAntes = console.error, linhas = [];
+  console.error = (...a) => linhas.push(a.join(' '));
+  global.fetch = async (url, opts) => {
+    if (String(url).endsWith('/rest/api/2/search')) {
+      const e = new TypeError('fetch failed'); e.cause = { code: 'ETIMEDOUT' }; throw e;
+    }
+    return antes(url, opts);
+  };
+  try { await call(loadHandler(), Q); } finally { console.error = logAntes; }
+  assert(linhas.some(l => l.includes('ETIMEDOUT')), 'log sem a causa real: ' + JSON.stringify(linhas));
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Campo `created` removido e lista única de tipos excluídos
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('Payload: `created` não é pedido ao Jira nem devolvido ao front', async () => {
+  const log = installFakeJira({ unassignedTotal: 2 });
+  const r = await call(loadHandler(), Q);
+  assert(!log.searches[0].fields.includes('created'), 'fields enviados: ' + log.searches[0].fields.join(','));
+  assert(log.searches[0].fields.includes('updated'), '`updated` continua necessário');
+  assert(!('created' in r.body.unassigned[0]), 'o chamado mapeado não deve ter `created`');
+});
+
+test('Tipos excluídos: módulo compartilhado exporta array congelado e Set equivalente', () => {
+  const m = require(path.join(API_DIR, '_lib', 'tipos-excluidos.js'));
+  assert(Array.isArray(m.NOMES_TIPOS_EXCLUIDOS) && m.NOMES_TIPOS_EXCLUIDOS.length > 0);
+  assert(Object.isFrozen(m.NOMES_TIPOS_EXCLUIDOS), 'lista deve ser imutável');
+  eq(m.TIPOS_EXCLUIDOS.size, m.NOMES_TIPOS_EXCLUIDOS.length);
+  m.NOMES_TIPOS_EXCLUIDOS.forEach(n => assert(m.TIPOS_EXCLUIDOS.has(n), 'Set sem ' + n));
+});
+
+test('Tipos excluídos: fonte única — tipos.js e chamados.js não têm cópia da lista', () => {
+  const fonte  = fs.readFileSync(path.join(API_DIR, '_lib', 'tipos-excluidos.js'), 'utf8');
+  const tipos  = fs.readFileSync(path.join(API_DIR, 'tipos.js'), 'utf8');
+  const chamad = fs.readFileSync(path.join(API_DIR, 'chamados.js'), 'utf8');
+  assert(fonte.includes('NÃO USAR'), 'a lista deve viver em _lib/tipos-excluidos.js');
+  ['Pre-Condition', 'NÃO USAR', 'Sub-tarefa'].forEach(marca => {
+    assert(!tipos.includes(marca),  'tipos.js voltou a ter uma cópia da lista (' + marca + ')');
+    assert(!chamad.includes(marca), 'chamados.js voltou a ter uma cópia da lista (' + marca + ')');
+  });
+  assert(tipos.includes("require('./_lib/tipos-excluidos')"),  'tipos.js deve importar a lista compartilhada');
+  assert(chamad.includes("require('./_lib/tipos-excluidos')"), 'chamados.js deve importar a lista compartilhada');
+});
+
+test('tipos.js: oculta os tipos excluídos, agrupa por nome, ordena e define Cache-Control', async () => {
+  installFakeJira({
+    types: [
+      { id: '10', name: 'Pre-Condition' },
+      { id: '11', name: 'Não utilizar' },
+      { id: '12', name: 'Sub-tarefa', subtask: true },
+      { id: '20', name: 'Dúvida' },
+      { id: '21', name: 'Dúvida' },
+      { id: '30', name: 'Atividade' },
+    ],
+  });
+  const r = await call(loadHandler({}, 'tipos.js'), {});
+  eq(r.code, 200);
+  deepEq(r.body.tipos.map(t => t.name), ['Atividade', 'Dúvida'], 'excluídos fora e ordem pt-BR');
+  deepEq(r.body.tipos[1].ids, ['20', '21'], 'IDs do mesmo nome agrupados');
+  assert(/max-age=3600/.test(r.headers['Cache-Control'] || ''), 'Cache-Control ausente');
+});
+
+test('Tipos: o que o seletor (tipos.js) esconde é o que as consultas (chamados.js) excluem', async () => {
+  const types = [
+    { id: '10', name: 'Pre-Condition' }, { id: '11', name: 'Não utilizar' },
+    { id: '12', name: 'Suporte (NÃO USAR - Use Dúvida)' }, { id: '20', name: 'Dúvida' },
+  ];
+  const log = installFakeJira({ unassignedTotal: 1, types });
+  const seletor = await call(loadHandler({}, 'tipos.js'), {});
+  await call(loadHandler(), Q);
+  const escondidos = types.filter(t => !seletor.body.tipos.some(x => x.name === t.name)).map(t => t.id).sort();
+  const m = log.searches[0].jql.match(/issuetype not in \(([^)]*)\)/);
+  assert(m, 'JQL sem exclusão de tipos: ' + log.searches[0].jql);
+  deepEq(m[1].split(',').map(x => x.trim()).sort(), escondidos, 'listas divergiram');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOVOS TESTES — Worker de polling REAL (public/timer-worker.js)
+//
+// O arquivo é executado em um sandbox (vm) com relógio e timers FALSOS, então os
+// testes são instantâneos e determinísticos (nada de esperar 60s de verdade).
+// ═════════════════════════════════════════════════════════════════════════════
+
+function loadWorker() {
+  const src = fs.readFileSync(path.join(__dirname, 'public', 'timer-worker.js'), 'utf8');
+  const clock = { now: 1000000 };
+  const timers = new Map();
+  const posted = [];
+  const cleared = [];
+  let nextId = 1;
+  const ctx = {
+    self: { postMessage: m => posted.push(m) },
+    Date: { now: () => clock.now },
+    setTimeout: (fn, ms) => { const id = nextId++; timers.set(id, { fn, ms }); return id; },
+    clearTimeout: id => { cleared.push(id); timers.delete(id); },
+  };
+  vm.runInNewContext(src, ctx);
+  return {
+    clock, timers, posted, cleared,
+    send: msg => ctx.self.onmessage({ data: msg }),
+    // dispara o próximo timer pendente (sem avançar o relógio)
+    fire() { const [id, t] = timers.entries().next().value; timers.delete(id); t.fn(); },
+    nextDelay() { return timers.values().next().value.ms; },
+  };
+}
+
+test('Worker: contagem completa envia apenas UM "done" e nenhum "tick"', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 5000, gen: 7 });
+  let ciclos = 0;
+  while (w.posted.length === 0 && ciclos++ < 100) {
+    w.clock.now += w.nextDelay();
+    w.fire();
+  }
+  eq(w.posted.length, 1, 'nenhuma mensagem além do done');
+  deepEq(w.posted[0], { type: 'done', gen: 7 });
+  eq(w.timers.size, 0, 'sem timers pendentes depois do done');
+});
+
+test('Worker: checagem interna a cada 1s, mas nunca espera mais do que falta', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 60000, gen: 1 });
+  eq(w.nextDelay(), 1000, 'com muito tempo restante, checa a cada 1s');
+  const w2 = loadWorker();
+  w2.send({ cmd: 'start', endAt: w2.clock.now + 400, gen: 1 });
+  eq(w2.nextDelay(), 400, 'restando 400ms, agenda exatamente 400ms');
+});
+
+test('Worker: usa o relógio de parede — após suspensão do computador dispara no 1º timer', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 60000, gen: 2 });
+  w.clock.now += 10 * 60000;           // o computador "dormiu" 10 minutos
+  w.fire();                            // o timer pendente acorda
+  eq(w.posted.length, 1, 'deve disparar de imediato, sem esperar mais 60s');
+  eq(w.posted[0].type, 'done');
+});
+
+test('Worker: dispara se o timer vier 1ms antes do prazo (reagenda o restante)', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 1000, gen: 1 });
+  w.clock.now += 999;                  // setTimeout adiantado
+  w.fire();
+  eq(w.posted.length, 0, 'ainda não chegou ao prazo');
+  eq(w.nextDelay(), 1, 'reagenda apenas o 1ms que falta');
+  w.clock.now += 1; w.fire();
+  eq(w.posted.length, 1);
+});
+
+test('Worker: stop cancela a contagem e nada é enviado', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 3000, gen: 1 });
+  w.send({ cmd: 'stop' });
+  eq(w.timers.size, 0, 'timer cancelado');
+  eq(w.posted.length, 0);
+});
+
+test('Worker: novo start substitui o anterior e o done usa o gen mais novo', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', endAt: w.clock.now + 5000, gen: 1 });
+  const primeiro = Array.from(w.timers.keys())[0];
+  w.send({ cmd: 'start', endAt: w.clock.now + 2000, gen: 2 });
+  assert(w.cleared.includes(primeiro), 'o timer do start anterior deve ser limpo');
+  eq(w.timers.size, 1, 'só um timer ativo');
+  w.clock.now += 2000; w.fire();
+  deepEq(w.posted, [{ type: 'done', gen: 2 }]);
+});
+
+test('Worker: aceita `interval` (segundos) por compatibilidade', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', interval: 3, gen: 4 });
+  w.clock.now += 3000; w.fire();
+  deepEq(w.posted, [{ type: 'done', gen: 4 }]);
+});
+
+test('Worker: start sem endAt nem interval usa 60s', () => {
+  const w = loadWorker();
+  w.send({ cmd: 'start', gen: 1 });
+  w.clock.now += 59999; w.fire();
+  eq(w.posted.length, 0, 'antes dos 60s não dispara');
+  w.clock.now += 1; w.fire();
+  eq(w.posted.length, 1);
+});
+
+test('Rótulo de contagem: segundosRestantes arredonda para cima e nunca fica negativo', () => {
+  const real = Date.now, AGORA = real.call(Date);
+  Date.now = () => AGORA;
+  try {
+    eq(FRONT.segundosRestantes(AGORA + 60000), 60);
+    eq(FRONT.segundosRestantes(AGORA + 59500), 60, 'ceil: 59,5s mostra 60');
+    eq(FRONT.segundosRestantes(AGORA + 1), 1);
+    eq(FRONT.segundosRestantes(AGORA), 0);
+    eq(FRONT.segundosRestantes(AGORA - 5000), 0, 'prazo vencido não pode ser negativo');
+  } finally { Date.now = real; }
+});
+
+test('Front: a página não depende mais de "tick" do worker nem de transição de 1s na barra', () => {
+  assert(!/type\s*===\s*'tick'/.test(HTML_SRC), 'index.html ainda trata mensagens tick');
+  assert(!/transition:\s*width\s*1s/.test(HTML_SRC), 'a barra voltou a ter transição de 1s por tick');
+  assert(/transition\s*=\s*'width '\s*\+\s*REFRESH_INTERVAL/.test(HTML_SRC), 'transição deve acompanhar REFRESH_INTERVAL');
+  assert(/cmd:\s*'start',\s*endAt:/.test(HTML_SRC), 'a página deve enviar o prazo absoluto (endAt) ao worker');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
